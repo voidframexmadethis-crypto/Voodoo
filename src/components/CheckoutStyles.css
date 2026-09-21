@@ -1,0 +1,168 @@
+.checkout-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.checkout-modal {
+  background: #1a1a1e;
+  border: 1px solid #2e2e35;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 850px;
+  padding: 30px;
+  position: relative;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+.close-modal-btn {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.checkout-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 30px;
+  margin-top: 15px;
+}
+
+.checkout-art-placeholder {
+  width: 100%;
+  aspect-ratio: 1/1;
+  background: #26262b;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 48px;
+  overflow: hidden;
+}
+
+.checkout-art-placeholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.track-meta-pills {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.track-meta-pills span {
+  background: #26262b;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #a1a1aa;
+}
+
+.producer-tag-line {
+  color: #a1a1aa;
+  font-size: 14px;
+  margin: 6px 0 12px 0;
+}
+
+.license-selection-panel h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.license-card {
+  display: block;
+  background: #26262b;
+  border: 1px solid #2e2e35;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.license-card.selected {
+  border-color: #ff3b30;
+  background: #2d1f21;
+}
+
+.license-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.license-title-text {
+  font-weight: 600;
+  flex-grow: 1;
+}
+
+.license-price-text {
+  font-weight: 700;
+  color: #ff3b30;
+}
+
+.license-feature-bullets {
+  margin: 12px 0 0 24px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: #a1a1aa;
+}
+
+.license-feature-bullets li {
+  margin-bottom: 4px;
+}
+
+.total-due-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 18px;
+  margin: 20px 0 10px 0;
+  border-top: 1px solid #2e2e35;
+  padding-top: 15px;
+}
+
+.bold-total {
+  font-weight: 800;
+  color: #ff3b30;
+}
+
+.instant-checkout-btn {
+  width: 100%;
+  padding: 14px;
+  background: #0070ba; /* PayPal Blue */
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.instant-checkout-btn:hover {
+  background: #005ea6;
+}
+
+.secure-notice {
+  font-size: 11px;
+  color: #a1a1aa;
+  text-align: center;
+  margin-top: 8px;
+}

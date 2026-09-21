@@ -1,0 +1,18 @@
+[
+  {
+    "id": "123",
+    "title": "Beat 123",
+    "audioUrl": "/beats/123.m4a",
+    "coverUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=60",
+    "producer": "VOODOO BOOMIN",
+    "price": 29.99
+  },
+  {
+    "id": "456",
+    "title": "Beat 456",
+    "audioUrl": "/beats/456.m4a",
+    "coverUrl": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=60",
+    "producer": "VOODOO BOOMIN",
+    "price": 34.99
+  }
+]

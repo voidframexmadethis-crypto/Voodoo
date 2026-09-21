@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Beat Validation
+    function isValidBeat(data) {
+      return data.keys().hasAll(['title', 'audioUrl', 'userId']) &&
+             data.title is string && data.title.size() <= 100 &&
+             data.audioUrl is string && data.audioUrl.size() <= 2048 &&
+             data.userId == request.auth.uid &&
+             (data.get('coverArtUrl', '') is string) &&
+             (data.get('untaggedWavUrl', '') is string) &&
+             (data.get('stemsZipUrl', '') is string) &&
+             (data.get('genre', '') is string) &&
+             (data.get('bpm', 0) is number) &&
+             (data.get('price', 0) is number) &&
+             (data.get('visibility', 'Public') in ['Public', 'Private', 'Unlisted']);
+    }
+
+    // License Validation
+    function isValidLicense(data) {
+      return data.keys().hasAll(['licenseType', 'price']) &&
+             data.licenseType in ['Basic_Lease', 'Premium_WAV', 'Trackout', 'Exclusive'] &&
+             data.price is number;
+    }
+
+    // Social Unlock Validation
+    function isValidSocialUnlock(data) {
+      return data.keys().hasAll(['requiredAction', 'targetAccountId']) &&
+             data.requiredAction in ['SPOTIFY_FOLLOW', 'YOUTUBE_SUBSCRIBE', 'EMAIL_LIST'] &&
+             data.targetAccountId is string && data.targetAccountId.size() <= 255;
+    }
+
+    // Profile Validation
+    function isValidProfile(data) {
+      return data.keys().hasAll(['name', 'userId']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.userId == request.auth.uid;
+    }
+
+    // Collection: Beats
+    match /beats/{beatId} {
+      allow get: if true; // Public can see individual beats
+      allow list: if resource.data.visibility == 'Public' || isOwner(resource.data.userId);
+      
+      allow create: if isSignedIn() && isValidId(beatId) && isValidBeat(incoming());
+      allow update: if isOwner(existing().userId) && isValidBeat(incoming()) && 
+                    incoming().userId == existing().userId;
+      allow delete: if isOwner(existing().userId);
+
+      // Subcollection: Licenses
+      match /licenses/{licenseId} {
+        allow read: if true;
+        allow write: if isOwner(get(/databases/$(database)/documents/beats/$(beatId)).data.userId) && isValidLicense(incoming());
+      }
+
+      // Subcollection: Social Unlocks
+      match /social_unlocks/{unlockId} {
+        allow read: if true;
+        allow write: if isOwner(get(/databases/$(database)/documents/beats/$(beatId)).data.userId) && isValidSocialUnlock(incoming());
+      }
+    }
+
+    // Collection: Profiles
+    match /profiles/{userId} {
+      allow get: if true;
+      allow create, update: if isOwner(userId) && isValidProfile(incoming());
+      allow delete: if isOwner(userId);
+    }
+  }
+}

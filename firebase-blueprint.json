@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Beat": {
+      "title": "Beat",
+      "description": "A musical beat uploaded by the producer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the beat." },
+        "title": { "type": "string", "maxLength": 100 },
+        "producer": { "type": "string", "maxLength": 50 },
+        "genre": { "type": "string", "maxLength": 50 },
+        "bpm": { "type": "number" },
+        "key": { "type": "string", "maxLength": 10 },
+        "price": { "type": "number" },
+        "coverArtUrl": { "type": "string", "maxLength": 2048 },
+        "audioUrl": { "type": "string", "maxLength": 2048, "description": "Tagged MP3 for public streaming." },
+        "untaggedWavUrl": { "type": "string", "maxLength": 2048, "description": "High quality WAV for buyers." },
+        "stemsZipUrl": { "type": "string", "maxLength": 2048, "description": "ZIP file containing individual track stems." },
+        "freeDownloadEnabled": { "type": "boolean" },
+        "visibility": { "type": "string", "enum": ["Public", "Private", "Unlisted"] },
+        "trackType": { "type": "string", "maxLength": 50 },
+        "likes": { "type": "number" },
+        "plays": { "type": "number" },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 30 }, "maxItems": 10 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string", "description": "The UID of the user who owns this beat." }
+      },
+      "required": ["title", "audioUrl", "userId"]
+    },
+    "License": {
+      "title": "License",
+      "description": "Pricing configuration for a specific license type.",
+      "type": "object",
+      "properties": {
+        "licenseType": { "type": "string", "enum": ["Basic_Lease", "Premium_WAV", "Trackout", "Exclusive"] },
+        "price": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["licenseType", "price"]
+    },
+    "SocialUnlock": {
+      "title": "Social Unlock",
+      "description": "Marketing automation for free downloads.",
+      "type": "object",
+      "properties": {
+        "requiredAction": { "type": "string", "enum": ["SPOTIFY_FOLLOW", "YOUTUBE_SUBSCRIBE", "EMAIL_LIST"] },
+        "targetAccountId": { "type": "string", "maxLength": 255 },
+        "freeDownloadFileType": { "type": "string", "enum": ["MP3", "WAV"] }
+      },
+      "required": ["requiredAction", "targetAccountId"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "The producer's profile info.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "paypalEmail": { "type": "string", "maxLength": 100 },
+        "userId": { "type": "string" }
+      },
+      "required": ["name", "userId"]
+    }
+  },
+  "firestore": {
+    "/beats/{beatId}": {
+      "schema": "Beat",
+      "description": "Collection of musical beats."
+    },
+    "/beats/{beatId}/licenses/{licenseId}": {
+      "schema": "License",
+      "description": "Subcollection of license options for a beat."
+    },
+    "/beats/{beatId}/social_unlocks/{unlockId}": {
+      "schema": "SocialUnlock",
+      "description": "Subcollection of social unlock locks for a beat."
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "User profile document, keyed by user ID."
+    }
+  }
+}

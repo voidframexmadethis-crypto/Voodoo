@@ -1,0 +1,8 @@
+{
+  "name": "Voodoo Boomin",
+  "description": "Voodoo Boomin beat store platform with an audio player, YouTube embeds, and a comprehensive beat uploader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Basic -->
+    <title>{BEAT_TITLE}</title>
+    <meta name="description" content="{BEAT_KEYWORDS_OR_SHORT_DESCRIPTION}" />
+
+    <!-- Open Graph (used by Facebook, LinkedIn, etc.) -->
+    <meta property="og:type" content="music.song" />
+    <meta property="og:title" content="{BEAT_TITLE}" />
+    <meta property="og:description" content="{BEAT_KEYWORDS_OR_SHORT_DESCRIPTION}" />
+    <meta property="og:url" content="{CANONICAL_PAGE_URL}" />
+    <meta property="og:image" content="{ABSOLUTE_IMAGE_URL}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{BEAT_TITLE}" />
+    <meta name="twitter:description" content="{BEAT_KEYWORDS_OR_SHORT_DESCRIPTION}" />
+    <meta name="twitter:image" content="{ABSOLUTE_IMAGE_URL}" />
+
+    <!-- Theme color for mobile browser bars -->
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <!-- ⚡ THE INSTANT SPEED SYNC CONTROLLER ⚡ -->
+    <script>
+      function updateStorefrontMetadata(newTitle, newArtist, newPrice, newArtworkUrl, newSpecs) {
+        // 1. Instantly update the visual player elements
+        const uiTitle = document.getElementById('ui-title');
+        if (uiTitle) uiTitle.innerText = newTitle;
+        
+        const uiArtist = document.getElementById('ui-artist');
+        if (uiArtist) uiArtist.innerText = "by " + newArtist;
+        
+        const uiPrice = document.getElementById('ui-price');
+        if (uiPrice) uiPrice.innerText = "$" + parseFloat(newPrice || 0).toFixed(2);
+        
+        const uiArtwork = document.getElementById('ui-artwork');
+        if (uiArtwork) uiArtwork.src = newArtworkUrl || "https://vercel.app";
+        
+        const uiSpecs = document.getElementById('ui-specs');
+        if (uiSpecs) uiSpecs.innerText = newSpecs;
+
+        // 2. Instantly update checkout url text block
+        const paypalUser = localStorage.getItem('VOODOO_BOOMIN_PERSONAL_PAYPAL') || localStorage.getItem('KRYPSIDE_PERSONAL_PAYPAL') || "YOUR_PAYPAL_USERNAME"; 
+        const uiCheckoutBtn = document.getElementById('ui-checkout-btn');
+        if (uiCheckoutBtn) {
+          const cleanPrice = parseFloat(newPrice || 0).toFixed(2);
+          let link = "https://paypal.me/" + paypalUser + "/" + cleanPrice;
+          if (paypalUser.includes('@')) {
+            link = "https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=" + encodeURIComponent(paypalUser) + "&amount=" + cleanPrice + "&currency_code=USD";
+          }
+          uiCheckoutBtn.href = link;
+        }
+
+        console.log("Ecosystem configuration updated instantly. Ready for instant deployment distribution.");
+      }
+      window.updateStorefrontMetadata = updateStorefrontMetadata;
+    </script>
+  </head>
+  <body style="background-color: #0a0a0a; color: #ffffff; margin: 0; min-height: 100vh;">
+    <div id="root" style="background-color: #0a0a0a; min-height: 100vh;"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

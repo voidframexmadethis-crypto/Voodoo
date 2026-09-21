@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+html, body {
+  background-color: #0a0a0a;
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  width: 100%;
+}
+
+#root {
+  background-color: #0a0a0a;
+  min-height: 100vh;
+}
+
+.player-card { 
+  max-width: 450px; 
+  margin: 40px auto; 
+  background: #0f172a; 
+  padding: 25px; 
+  border-radius: 16px; 
+  border: 1px solid #1e293b; 
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+}
+.artwork-view { 
+  width: 250px; 
+  height: 250px; 
+  border-radius: 12px; 
+  object-fit: cover; 
+  margin-bottom: 20px; 
+  border: 2px solid #00ffcc; 
+  box-shadow: 0 4px 15px rgba(0,255,204,0.2); 
+}
+.price-text { 
+  color: #00ffcc; 
+  font-size: 2.2rem; 
+  font-weight: bold; 
+  margin: 15px 0; 
+}
+.btn-paypal { 
+  display: inline-block; 
+  width: 100%; 
+  max-width: 280px; 
+  padding: 14px; 
+  background-color: #0070ba; 
+  color: #fff; 
+  text-decoration: none; 
+  font-weight: bold; 
+  border-radius: 50px; 
+  text-transform: uppercase; 
+  box-shadow: 0 4px 15px rgba(0,112,186,0.4); 
+  margin-top: 10px; 
+}
+
+/* Isolated Audio Element Container - Locked Layout Guard */
+.global-audio-player-anchor {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  z-index: 99999 !important; /* Forces player to stay visible above checkout modals */
+  pointer-events: auto !important;
+}
+
+.checkout-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.checkout-modal {
+  background: #1a1a1e;
+  border: 1px solid #2e2e35;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 850px;
+  padding: 30px;
+  position: relative;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+.close-modal-btn {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.checkout-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 30px;
+  margin-top: 15px;
+}
+
+.checkout-art-placeholder {
+  width: 100%;
+  aspect-ratio: 1/1;
+  background: #26262b;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 48px;
+  overflow: hidden;
+}
+
+.checkout-art-placeholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.track-meta-pills {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.track-meta-pills span {
+  background: #26262b;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #a1a1aa;
+}
+
+.license-card {
+  display: block;
+  background: #26262b;
+  border: 1px solid #2e2e35;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.license-card.selected {
+  border-color: #ff3b30;
+  background: #2d1f21;
+}
+
+.license-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.license-title-text {
+  font-weight: 600;
+  flex-grow: 1;
+}
+
+.license-price-text {
+  font-weight: 700;
+  color: #ff3b30;
+}
+
+.license-feature-bullets {
+  margin: 12px 0 0 24px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: #a1a1aa;
+}
+
+.license-feature-bullets li {
+  margin-bottom: 4px;
+}
+
+.total-due-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 18px;
+  margin: 20px 0 10px 0;
+  border-top: 1px solid #2e2e35;
+  padding-top: 15px;
+}
+
+.bold-total {
+  font-weight: 800;
+  color: #ff3b30;
+}
+
+.instant-checkout-btn {
+  width: 100%;
+  padding: 14px;
+  background: #0070ba; /* PayPal Blue */
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.secure-notice {
+  font-size: 11px;
+  color: #a1a1aa;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* Upgraded Voodoo Wave beat-synced animation */
+@keyframes voodoo-wave {
+  0%, 100% {
+    transform: scaleY(0.7);
+  }
+  50% {
+    transform: scaleY(1.2);
+  }
+}
+
+.animate-voodoo-beat {
+  animation: voodoo-wave 0.46s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+
