@@ -2,13 +2,10 @@ import React, { createContext, useState, useEffect, ReactNode, useContext, useMe
 import { Beat, BeatPack, PackTrack } from '../types';
 import { audioEngine, PlaybackItem, PlaybackState } from '../lib/audioEngine';
 import { getWaveformData } from '../lib/waveformEngine';
-import { db } from '../lib/firebase';
-import { doc, increment, updateDoc, getDoc } from 'firebase/firestore';
-import { processTrackStreamMetric } from '../lib/milestoneTracker';
 
 export interface AudioPlayerContextType {
   // Current track representations
-  currentTrack: Beat | null; // Backwards compatibility with existing components
+  currentTrack: Beat | null;
   activePlaybackItem: PlaybackItem | null;
   playbackType: 'SINGLE_BEAT' | 'BEAT_PACK_PREVIEW' | 'CUSTOM';
   currentPackId: string | null;
@@ -28,9 +25,17 @@ export interface AudioPlayerContextType {
   playbackError: string | null;
   waveformData: number[];
 
+  // 🎛️ Live Playback Modifiers
+  speed: number;
+  pitchSemitones: number;
+  isLooping: boolean;
+  loopStart: number;
+  loopEnd: number;
+
   // Queue state
   queue: PlaybackItem[];
   queueIndex: number;
+  continuousPlaybackEnabled: boolean;
 
   // Actions
   playTrack: (track: Beat | PlaybackItem, queue?: (Beat | PlaybackItem)[], index?: number) => void;
@@ -50,6 +55,28 @@ export interface AudioPlayerContextType {
   toggleShuffle: () => void;
   retryPlayback: () => void;
   clearPlaybackError: () => void;
+
+  // Queue Actions
+  addToQueue: (track: Beat | PlaybackItem) => void;
+  removeFromQueue: (index: number) => void;
+  clearQueue: () => void;
+  reorderQueue: (startIndex: number, endIndex: number) => void;
+  setContinuousPlaybackEnabled: (enabled: boolean) => void;
+
+  // Modifier Actions
+  setSpeed: (speed: number) => void;
+  resetSpeed: () => void;
+  setPitch: (semitones: number) => void;
+  resetPitch: () => void;
+  toggleLoop: (customBpm?: number) => void;
+  setLoopRange: (start: number, end: number) => void;
+  disableLoop: () => void;
+
+  // Web Audio Visualizer API
+  getFrequencyData: () => Uint8Array | null;
+  getTimeDomainData: () => Uint8Array | null;
+  getAnalyserNode: () => AnalyserNode | null;
+  initWebAudio: () => void;
 }
 
 export const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
@@ -130,7 +157,6 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       return engineState.currentTrack.originalData as Beat;
     }
 
-    // Synthesize compatible Beat object for BeatPack tracks or custom items
     return {
       id: engineState.currentTrack.id,
       title: engineState.currentTrack.title,
@@ -153,7 +179,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [engineState.currentTrack]);
 
-  // Trigger non-blocking stream analytics
+  // Trigger real stream analytics
   const logStreamAnalytics = useCallback((trackId: string) => {
     if (!trackId || trackId.startsWith('local_') || trackId.startsWith('default_') || trackId.includes('_track_')) {
       return;
@@ -164,19 +190,6 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: trackId }),
     }).catch(() => {});
-
-    try {
-      const beatRef = doc(db, 'beats', trackId);
-      updateDoc(beatRef, { plays: increment(1) })
-        .then(() => getDoc(beatRef))
-        .then((snap) => {
-          if (snap.exists()) {
-            const currentPlays = snap.data().plays || 0;
-            processTrackStreamMetric(trackId, currentPlays);
-          }
-        })
-        .catch(() => {});
-    } catch (e) {}
   }, []);
 
   const playTrack = useCallback((
@@ -195,6 +208,17 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     audioEngine.playTrack(item, convertedQueue, index);
     if (item.type === 'SINGLE_BEAT' && item.id) {
       logStreamAnalytics(item.id);
+      try {
+        const historyStr = localStorage.getItem('voodooboomin_recently_played');
+        let history: string[] = historyStr ? JSON.parse(historyStr) : [];
+        history = history.filter(id => id !== item.id);
+        history.unshift(item.id);
+        history = history.slice(0, 20); // Limit to 20 items
+        localStorage.setItem('voodooboomin_recently_played', JSON.stringify(history));
+        window.dispatchEvent(new Event('voodooboomin_recently_played_updated'));
+      } catch (err) {
+        console.error('Failed to update recently played history:', err);
+      }
     }
   }, [logStreamAnalytics]);
 
@@ -227,6 +251,41 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const retryPlayback = useCallback(() => audioEngine.retry(), []);
   const clearPlaybackError = useCallback(() => audioEngine.retry(), []);
 
+  const setSpeed = useCallback((spd: number) => audioEngine.setSpeed(spd), []);
+  const resetSpeed = useCallback(() => audioEngine.resetSpeed(), []);
+  const setPitch = useCallback((st: number) => audioEngine.setPitch(st), []);
+  const resetPitch = useCallback(() => audioEngine.resetPitch(), []);
+  const toggleLoop = useCallback((customBpm?: number) => audioEngine.toggleLoop(customBpm), []);
+  const setLoopRange = useCallback((start: number, end: number) => audioEngine.setLoopRange(start, end), []);
+  const disableLoop = useCallback(() => audioEngine.disableLoop(), []);
+
+  // Queue actions (Feature 11 & 12)
+  const addToQueue = useCallback((track: Beat | PlaybackItem) => {
+    const item = 'type' in track ? (track as PlaybackItem) : beatToPlaybackItem(track as Beat);
+    audioEngine.addToQueue(item);
+  }, []);
+
+  const removeFromQueue = useCallback((index: number) => {
+    audioEngine.removeFromQueue(index);
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    audioEngine.clearQueue();
+  }, []);
+
+  const reorderQueue = useCallback((startIndex: number, endIndex: number) => {
+    audioEngine.reorderQueue(startIndex, endIndex);
+  }, []);
+
+  const setContinuousPlaybackEnabled = useCallback((enabled: boolean) => {
+    audioEngine.setContinuousPlaybackEnabled(enabled);
+  }, []);
+
+  const getFrequencyData = useCallback(() => audioEngine.getFrequencyData(), []);
+  const getTimeDomainData = useCallback(() => audioEngine.getTimeDomainData(), []);
+  const getAnalyserNode = useCallback(() => audioEngine.getAnalyserNode(), []);
+  const initWebAudio = useCallback(() => audioEngine.initWebAudio(), []);
+
   const playbackType = engineState.currentTrack?.type || 'SINGLE_BEAT';
   const currentPackId = engineState.currentTrack?.packId || null;
   const activeTrackNum = engineState.currentTrack?.trackNumber || null;
@@ -253,8 +312,15 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         playbackError: engineState.error,
         waveformData,
 
+        speed: engineState.speed,
+        pitchSemitones: engineState.pitchSemitones,
+        isLooping: engineState.isLooping,
+        loopStart: engineState.loopStart,
+        loopEnd: engineState.loopEnd,
+
         queue: engineState.queue,
         queueIndex: engineState.queueIndex,
+        continuousPlaybackEnabled: engineState.continuousPlaybackEnabled,
 
         playTrack,
         playPack,
@@ -273,6 +339,25 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         toggleShuffle,
         retryPlayback,
         clearPlaybackError,
+
+        addToQueue,
+        removeFromQueue,
+        clearQueue,
+        reorderQueue,
+        setContinuousPlaybackEnabled,
+
+        setSpeed,
+        resetSpeed,
+        setPitch,
+        resetPitch,
+        toggleLoop,
+        setLoopRange,
+        disableLoop,
+
+        getFrequencyData,
+        getTimeDomainData,
+        getAnalyserNode,
+        initWebAudio,
       }}
     >
       {children}

@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
-import { Lock, BarChart3, DollarSign, TrendingUp, PlayCircle, Share2, ThumbsUp, ThumbsDown, Music, UploadCloud, Download, Eye, Users, Mail, Bell, RefreshCw, Send, CheckCircle2, Volume2, Upload, LogOut, Disc, Package, Tag, ShieldCheck, FileText } from 'lucide-react';
+import { Lock, BarChart3, DollarSign, TrendingUp, PlayCircle, Share2, ThumbsUp, ThumbsDown, Music, UploadCloud, Download, Eye, Users, Mail, Bell, RefreshCw, Send, CheckCircle2, Volume2, Upload, LogOut, Disc, Package, Tag, ShieldCheck, FileText, Megaphone, LayoutTemplate, Globe, Sparkles } from 'lucide-react';
 import Uploader from './Uploader';
 import BeatsManagement from '../components/admin/BeatsManagement';
 import BeatPacksManagement from '../components/admin/BeatPacksManagement';
 import PromotionsManagement from '../components/admin/PromotionsManagement';
 import TrackingRightsManagement from '../components/admin/TrackingRightsManagement';
 import AuditLogView from '../components/admin/AuditLogView';
+import FeedManagement from '../components/admin/FeedManagement';
+import HomepageBuilder from '../components/admin/HomepageBuilder';
+import DistributionPartnersManagement from '../components/admin/DistributionPartnersManagement';
+import FeaturedVaultManagement from '../components/admin/FeaturedVaultManagement';
 
 export default function Admin() {
   const { state, updateProfile, resetAnalytics } = useStore();
@@ -37,7 +41,7 @@ export default function Admin() {
     return <Navigate to="/" replace />;
   }
 
-  type AdminTab = 'dashboard' | 'beats' | 'packs' | 'promotions' | 'tracking' | 'rights' | 'audit' | 'subscribers' | 'voicetag' | 'uploader' | 'plaque';
+  type AdminTab = 'dashboard' | 'layout' | 'featured_vault' | 'feed' | 'services' | 'beats' | 'packs' | 'promotions' | 'tracking' | 'rights' | 'audit' | 'subscribers' | 'voicetag' | 'uploader' | 'plaque';
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [subscribers, setSubscribers] = useState<{ email: string; name: string; subscribedAt: string; notifyOnBeatDrop: boolean }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,7 +89,7 @@ export default function Admin() {
   const totalDownloads = state.beats.reduce((sum, beat) => sum + (beat.downloads || 0), 0);
 
   return (
-    <div className="w-full max-w-6xl mx-auto pb-20 animate-in fade-in duration-500">
+    <div className="w-full pb-20 animate-in fade-in duration-500">
       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center">
@@ -102,6 +106,34 @@ export default function Admin() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Analytics
+            </button>
+            <button 
+              onClick={() => setActiveTab('layout')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'layout' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-300 hover:text-white hover:bg-neutral-800/50'}`}
+            >
+              <LayoutTemplate className="w-3.5 h-3.5 text-purple-400" />
+              Homepage Builder
+            </button>
+            <button 
+              onClick={() => setActiveTab('featured_vault')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'featured_vault' ? 'bg-amber-600 text-white shadow-md' : 'text-amber-300 hover:text-white hover:bg-neutral-800/50'}`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              Featured, Banner & Vault
+            </button>
+            <button 
+              onClick={() => setActiveTab('feed')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'feed' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
+            >
+              <Megaphone className="w-3.5 h-3.5 text-indigo-400" />
+              Feed
+            </button>
+            <button 
+              onClick={() => setActiveTab('services')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'services' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-300 hover:text-white hover:bg-neutral-800/50'}`}
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              Services / Distribution
             </button>
             <button 
               onClick={() => setActiveTab('beats')}
@@ -180,6 +212,18 @@ export default function Admin() {
           </button>
         </div>
       </div>
+
+      {activeTab === 'layout' && (
+        <HomepageBuilder />
+      )}
+
+      {activeTab === 'feed' && (
+        <FeedManagement />
+      )}
+
+      {activeTab === 'services' && (
+        <DistributionPartnersManagement />
+      )}
 
       {activeTab === 'beats' && (
         <BeatsManagement onSwitchToUploader={() => setActiveTab('uploader')} />
@@ -667,6 +711,9 @@ export default function Admin() {
         </>
       )}
 
+      {activeTab === 'featured_vault' && (
+        <FeaturedVaultManagement />
+      )}
       {activeTab === 'subscribers' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Header Row */}

@@ -1,53 +1,67 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signIn: () => Promise<void>;
+  signIn: (email?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const AUTH_STORAGE_KEY = 'voodooboomin_auth_user';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Error restoring auth state:', e);
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('Auth state changed:', currentUser ? `User logged in: ${currentUser.email}` : 'User logged out');
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (user) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      localStorage.setItem('VOODOO_BOOMIN_ADMIN_AUTH', 'true');
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem('VOODOO_BOOMIN_ADMIN_AUTH');
+    }
+  }, [user]);
 
-  const signIn = async () => {
-    const provider = new GoogleAuthProvider();
-    // Prompt the user to select an account even if they're already signed in
-    provider.setCustomParameters({ prompt: 'select_account' });
+  const signIn = async (customEmail?: string) => {
+    setLoading(true);
     try {
-      await signInWithPopup(auth, provider);
-    } catch (error: any) {
-      console.error('Error signing in:', error);
-      // Provide user-friendly feedback for common errors
-      if (error.code === 'auth/popup-blocked') {
-        alert('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
-      } else if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
-        // User closed or cancelled the popup, no need for alert
-      } else {
-        alert(`Failed to sign in: ${error.message}`);
-      }
+      const email = customEmail || localStorage.getItem('VOODOO_BOOMIN_ADMIN_EMAIL') || 'glennbucky@gmail.com';
+      const authenticatedUser: User = {
+        uid: `user_${Date.now()}`,
+        email: email,
+        displayName: 'Voodoo Boomin',
+        photoURL: null,
+      };
+      setUser(authenticatedUser);
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = async () => {
+    setLoading(true);
     try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Error signing out:', error);
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 

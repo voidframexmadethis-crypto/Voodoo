@@ -723,76 +723,86 @@ export default function Profile() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {publicBeats.map((beat) => {
-                const isCurrentPlaying = isPlaying && currentTrack?.id === beat.id;
-                return (
-                  <div
-                    key={beat.id}
-                    className="bg-gradient-to-b from-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-red-500/50 rounded-2xl p-5 transition-all duration-300 group flex flex-col justify-between shadow-xl hover:shadow-[0_10px_30px_rgba(239,68,68,0.2)]"
-                  >
-                    <div className="flex gap-4 items-center">
-                      <div className="relative w-22 h-22 rounded-xl overflow-hidden bg-neutral-950 shrink-0 border border-neutral-800 group-hover:border-red-500/40 transition-colors">
-                        <img src={beat.coverArtUrl} alt={beat.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        <button
-                          onClick={() => {
-                            if (isCurrentPlaying) {
-                              togglePlay();
-                            } else {
-                              playTrack(beat);
-                            }
-                          }}
-                          className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity z-10"
-                        >
-                          {isCurrentPlaying ? (
-                            <Pause size={28} className="text-yellow-400 fill-current" />
-                          ) : (
-                            <Play size={28} className="text-yellow-400 fill-current ml-1" />
-                          )}
-                        </button>
+            {publicBeats.length === 0 ? (
+              <div className="text-center py-16 px-4 bg-neutral-900/40 rounded-2xl border border-dashed border-neutral-800">
+                <Disc className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">No Beats in Catalog</h3>
+                <p className="text-sm text-neutral-400 mt-1 max-w-md mx-auto">
+                  New instrumentals and master audio tracks will appear here once uploaded.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {publicBeats.map((beat) => {
+                  const isCurrentPlaying = isPlaying && currentTrack?.id === beat.id;
+                  return (
+                    <div
+                      key={beat.id}
+                      className="bg-gradient-to-b from-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-red-500/50 rounded-2xl p-5 transition-all duration-300 group flex flex-col justify-between shadow-xl hover:shadow-[0_10px_30px_rgba(239,68,68,0.2)]"
+                    >
+                      <div className="flex gap-4 items-center">
+                        <div className="relative w-22 h-22 rounded-xl overflow-hidden bg-neutral-950 shrink-0 border border-neutral-800 group-hover:border-red-500/40 transition-colors">
+                          <img src={beat.coverArtUrl} alt={beat.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                          <button
+                            onClick={() => {
+                              if (isCurrentPlaying) {
+                                togglePlay();
+                              } else {
+                                playTrack(beat);
+                              }
+                            }}
+                            className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity z-10"
+                          >
+                            {isCurrentPlaying ? (
+                              <Pause size={28} className="text-yellow-400 fill-current" />
+                            ) : (
+                              <Play size={28} className="text-yellow-400 fill-current ml-1" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-black text-white truncate tracking-tight group-hover:text-yellow-300 transition-colors">
+                            {beat.title}
+                          </h3>
+                          <p className="text-xs text-red-400 font-mono font-bold mt-1">
+                            {beat.bpm} BPM • {beat.key}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {beat.tags?.slice(0, 2).map((t, idx) => (
+                              <span key={idx} className="text-[9px] uppercase px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono font-bold">
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-black text-white truncate tracking-tight group-hover:text-yellow-300 transition-colors">
-                          {beat.title}
-                        </h3>
-                        <p className="text-xs text-red-400 font-mono font-bold mt-1">
-                          {beat.bpm} BPM • {beat.key}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {beat.tags?.slice(0, 2).map((t, idx) => (
-                            <span key={idx} className="text-[9px] uppercase px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono font-bold">
-                              #{t}
-                            </span>
-                          ))}
+                      <div className="mt-5 pt-4 border-t border-neutral-800/80 flex items-center justify-between">
+                        <span className="text-lg font-black text-white font-mono">
+                          ${(beat.price || 29.99).toFixed(2)}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => addToCart(beat)}
+                            className="px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-black uppercase flex items-center gap-1.5 transition-colors"
+                          >
+                            <ShoppingCart size={14} />
+                            <span>Cart</span>
+                          </button>
+                          <button
+                            onClick={() => setCheckoutBeat(beat)}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-black text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-md hover:scale-105"
+                          >
+                            <span>Lease</span>
+                          </button>
                         </div>
                       </div>
                     </div>
-
-                    <div className="mt-5 pt-4 border-t border-neutral-800/80 flex items-center justify-between">
-                      <span className="text-lg font-black text-white font-mono">
-                        ${(beat.price || 29.99).toFixed(2)}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => addToCart(beat)}
-                          className="px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-black uppercase flex items-center gap-1.5 transition-colors"
-                        >
-                          <ShoppingCart size={14} />
-                          <span>Cart</span>
-                        </button>
-                        <button
-                          onClick={() => setCheckoutBeat(beat)}
-                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-black text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-md hover:scale-105"
-                        >
-                          <span>Lease</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -806,76 +816,86 @@ export default function Profile() {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {publicPacks.map((pack) => {
-                const isCurrentPackPlaying = isPlaying && currentPackId === pack.id;
-                return (
-                  <div 
-                    key={pack.id}
-                    className="p-6 rounded-2xl bg-gradient-to-b from-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-yellow-400/50 transition-all flex flex-col justify-between shadow-xl"
-                  >
-                    <div>
-                      <div className="flex gap-4 items-start">
-                        <div className="relative w-26 h-26 rounded-xl overflow-hidden bg-neutral-950 shrink-0 border border-yellow-500/40">
-                          <img src={pack.coverArtUrl} alt={pack.title} className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => {
-                              if (isCurrentPackPlaying) {
-                                togglePlay();
-                              } else {
-                                playPack(pack, 1);
-                              }
-                            }}
-                            className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-                          >
-                            {isCurrentPackPlaying ? <Pause size={28} className="text-yellow-400 fill-current" /> : <Play size={28} className="text-yellow-400 fill-current ml-1" />}
-                          </button>
+            {publicPacks.length === 0 ? (
+              <div className="text-center py-16 px-4 bg-neutral-900/40 rounded-2xl border border-dashed border-neutral-800">
+                <Package className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">No Beat Packs Available</h3>
+                <p className="text-sm text-neutral-400 mt-1 max-w-md mx-auto">
+                  Curated sound packs and stem vaults will appear here once published.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {publicPacks.map((pack) => {
+                  const isCurrentPackPlaying = isPlaying && currentPackId === pack.id;
+                  return (
+                    <div 
+                      key={pack.id}
+                      className="p-6 rounded-2xl bg-gradient-to-b from-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-yellow-400/50 transition-all flex flex-col justify-between shadow-xl"
+                    >
+                      <div>
+                        <div className="flex gap-4 items-start">
+                          <div className="relative w-26 h-26 rounded-xl overflow-hidden bg-neutral-950 shrink-0 border border-yellow-500/40">
+                            <img src={pack.coverArtUrl} alt={pack.title} className="w-full h-full object-cover" />
+                            <button
+                              onClick={() => {
+                                if (isCurrentPackPlaying) {
+                                  togglePlay();
+                                } else {
+                                  playPack(pack, 1);
+                                }
+                              }}
+                              className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                            >
+                              {isCurrentPackPlaying ? <Pause size={28} className="text-yellow-400 fill-current" /> : <Play size={28} className="text-yellow-400 fill-current ml-1" />}
+                            </button>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-yellow-400/20 text-yellow-300 font-mono">
+                              {pack.tracks?.length || 0} TRACK VAULT
+                            </span>
+                            <h3 className="text-base font-black text-white truncate mt-1.5">
+                              {pack.title}
+                            </h3>
+                            <p className="text-xs text-neutral-400 line-clamp-2 mt-1">
+                              {pack.description || 'Full master pack with stems, midis, and unlimited license clearance.'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-yellow-400/20 text-yellow-300 font-mono">
-                            {pack.tracks?.length || 0} TRACK VAULT
-                          </span>
-                          <h3 className="text-base font-black text-white truncate mt-1.5">
-                            {pack.title}
-                          </h3>
-                          <p className="text-xs text-neutral-400 line-clamp-2 mt-1">
-                            {pack.description || 'Full master pack with stems, midis, and unlimited license clearance.'}
-                          </p>
-                        </div>
+
+                        {/* Track preview list */}
+                        {pack.tracks && (
+                          <div className="mt-4 pt-3 border-t border-neutral-800 space-y-1.5">
+                            {pack.tracks.slice(0, 3).map((tr) => (
+                              <div 
+                                key={tr.trackNumber}
+                                onClick={() => playPackTrack(pack, tr)}
+                                className="flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors font-mono"
+                              >
+                                <span className="truncate">#{tr.trackNumber} {tr.title}</span>
+                                <Play size={12} className="text-yellow-400" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Track preview list */}
-                      {pack.tracks && (
-                        <div className="mt-4 pt-3 border-t border-neutral-800 space-y-1.5">
-                          {pack.tracks.slice(0, 3).map((tr) => (
-                            <div 
-                              key={tr.trackNumber}
-                              onClick={() => playPackTrack(pack, tr)}
-                              className="flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors font-mono"
-                            >
-                              <span className="truncate">#{tr.trackNumber} {tr.title}</span>
-                              <Play size={12} className="text-yellow-400" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <div className="mt-5 pt-4 border-t border-neutral-800 flex items-center justify-between">
+                        <span className="text-xl font-black text-yellow-400 font-mono">
+                          ${pack.price.toFixed(2)}
+                        </span>
+                        <button
+                          onClick={() => playPack(pack, 1)}
+                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-black font-black text-xs uppercase tracking-wider hover:scale-105 transition-transform"
+                        >
+                          Audition Pack
+                        </button>
+                      </div>
                     </div>
-
-                    <div className="mt-5 pt-4 border-t border-neutral-800 flex items-center justify-between">
-                      <span className="text-xl font-black text-yellow-400 font-mono">
-                        ${pack.price.toFixed(2)}
-                      </span>
-                      <button
-                        onClick={() => playPack(pack, 1)}
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-black font-black text-xs uppercase tracking-wider hover:scale-105 transition-transform"
-                      >
-                        Audition Pack
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

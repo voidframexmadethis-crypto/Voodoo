@@ -27,13 +27,21 @@ import {
   ListMusic,
   Radio,
   Layers,
-  Package
+  Package,
+  SlidersHorizontal,
+  Activity,
+  Gauge,
+  Heart,
+  Share2,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useStore } from '../context/StoreContext';
 import CheckoutModal from './CheckoutModal';
 import CheckoutErrorBoundary from './CheckoutErrorBoundary';
+import AudioVisualizer from './AudioVisualizer';
+import LivePlaybackControls from './LivePlaybackControls';
 
 export default function AudioPlayer() {
   const { 
@@ -54,6 +62,11 @@ export default function AudioPlayer() {
     isShuffle,
     playbackError,
     waveformData,
+    speed,
+    pitchSemitones,
+    isLooping,
+    loopStart,
+    loopEnd,
     queue,
     queueIndex,
     togglePlay, 
@@ -67,17 +80,147 @@ export default function AudioPlayer() {
     setRepeatMode,
     toggleShuffle,
     retryPlayback,
-    playTrack
+    playTrack,
+    continuousPlaybackEnabled,
+    setContinuousPlaybackEnabled,
+    removeFromQueue,
+    clearQueue,
+    reorderQueue
   } = useAudioPlayer();
   
-  const { state, updateBeat, incrementAnalytics } = useStore();
+  const { state, updateBeat, incrementAnalytics, favorites, toggleFavorite } = useStore();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeDrawerTab, setActiveDrawerTab] = useState<'monitor' | 'queue'>('monitor');
+  const [activeDrawerTab, setActiveDrawerTab] = useState<'monitor' | 'modifiers' | 'queue'>('monitor');
   const [checkoutBeat, setCheckoutBeat] = useState<any | null>(null);
   const [isHoveringWaveform, setIsHoveringWaveform] = useState(false);
   const [hoverTime, setHoverTime] = useState(0);
   const waveformContainerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Custom states for continuous scrubbing & sharing
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingMicro, setIsDraggingMicro] = useState(false);
+  const microScrubberRef = useRef<HTMLDivElement | null>(null);
+  const [copiedPlayer, setCopiedPlayer] = useState(false);
+
+  // Helper to translate coordinates into seek times
+  const handleScrub = (clientX: number, container: HTMLDivElement) => {
+    if (!duration) return;
+    const rect = container.getBoundingClientRect();
+    const clickX = clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    seek(ratio * duration);
+  };
+
+  // Expanded Waveform Scrubbing drag effects
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (waveformContainerRef.current) {
+        handleScrub(e.clientX, waveformContainerRef.current);
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    const handleWindowTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault(); // Prevent body scroll while scrubbing on iPad
+      }
+      if (waveformContainerRef.current && e.touches[0]) {
+        handleScrub(e.touches[0].clientX, waveformContainerRef.current);
+      }
+    };
+
+    const handleWindowTouchEnd = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
+    window.addEventListener('touchend', handleWindowTouchEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('touchmove', handleWindowTouchMove);
+      window.removeEventListener('touchend', handleWindowTouchEnd);
+    };
+  }, [isDragging, duration]);
+
+  // Micro Scrubber Continuous dragging scrub effects
+  useEffect(() => {
+    if (!isDraggingMicro) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (microScrubberRef.current) {
+        handleScrub(e.clientX, microScrubberRef.current);
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDraggingMicro(false);
+    };
+
+    const handleWindowTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      if (microScrubberRef.current && e.touches[0]) {
+        handleScrub(e.touches[0].clientX, microScrubberRef.current);
+      }
+    };
+
+    const handleWindowTouchEnd = () => {
+      setIsDraggingMicro(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
+    window.addEventListener('touchend', handleWindowTouchEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('touchmove', handleWindowTouchMove);
+      window.removeEventListener('touchend', handleWindowTouchEnd);
+    };
+  }, [isDraggingMicro, duration]);
+
+  // Unified Share & Copy handler
+  const handleSharePlayer = async () => {
+    const item = activePlaybackItem || currentTrack;
+    if (!item) return;
+
+    const cleanId = item.id.includes('_track_') ? currentTrack?.id || item.id : item.id;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?beat=${cleanId}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: item.title,
+          text: `Listen to "${item.title}" on Voodoo Boomin!`,
+          url: shareUrl,
+        });
+        return;
+      } catch (e) {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedPlayer(true);
+      setTimeout(() => setCopiedPlayer(false), 2500);
+    } catch (e) {
+      console.error('Clipboard error:', e);
+    }
+  };
 
   if (!activePlaybackItem && !currentTrack) return null;
 
@@ -165,6 +308,20 @@ export default function AudioPlayer() {
                       Studio Monitor
                     </button>
                     <button
+                      onClick={() => setActiveDrawerTab('modifiers')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        activeDrawerTab === 'modifiers'
+                          ? 'bg-purple-600 text-white shadow-md'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      Live Modifiers
+                      {(pitchSemitones !== 0 || speed !== 1.0 || isLooping) && (
+                        <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+                      )}
+                    </button>
+                    <button
                       onClick={() => setActiveDrawerTab('queue')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                         activeDrawerTab === 'queue'
@@ -221,12 +378,12 @@ export default function AudioPlayer() {
                           </span>
                           {displayBpm && (
                             <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-neutral-300">
-                              {displayBpm} BPM
+                              {Math.round(displayBpm * speed)} BPM {speed !== 1.0 ? `(${Math.round(speed * 100)}%)` : ''}
                             </span>
                           )}
                           {displayKey && (
                             <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-neutral-300">
-                              {displayKey}
+                              {displayKey} {pitchSemitones !== 0 ? `(${pitchSemitones > 0 ? `+${pitchSemitones}` : pitchSemitones}st)` : ''}
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-emerald-400 font-bold">
@@ -255,6 +412,16 @@ export default function AudioPlayer() {
                             <span>License & Purchase (${displayPrice.toFixed(2)})</span>
                           </button>
                         )}
+
+                        <button 
+                          onClick={handleSharePlayer}
+                          className="px-5 py-3 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-neutral-300 hover:text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 relative cursor-pointer"
+                          title="Share / Copy Beat Link"
+                        >
+                          <Share2 className="w-4 h-4 text-purple-400" />
+                          <span>{copiedPlayer ? 'Link Copied!' : 'Share Beat'}</span>
+                        </button>
+
                         <span className="text-xs text-neutral-500 font-mono">
                           Source Audio Protected • Stream Safe
                         </span>
@@ -262,23 +429,52 @@ export default function AudioPlayer() {
                     </div>
                   </div>
 
-                  {/* Interactive Dynamic Waveform Visualizer Display */}
+                  {/* 🎛️ Real-Time Audio Visualizer */}
+                  <AudioVisualizer height={140} showControls={true} />
+
+                  {/* Interactive Dynamic Waveform Visualizer Display with Loop Highlighting */}
                   <div className="bg-neutral-900/60 border border-purple-900/30 rounded-2xl p-4 sm:p-6 space-y-3">
                     <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
                       <span className="text-purple-400 font-bold flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" /> High-Resolution Amplitude Spectrum
+                        <Sparkles className="w-3.5 h-3.5" /> High-Resolution Amplitude Track Map
                       </span>
-                      <span>Click anywhere along waveform to seek accurately</span>
+                      <span>Click or drag along waveform to seek accurately</span>
                     </div>
 
                     <div 
                       ref={waveformContainerRef}
-                      onClick={handleWaveformClick}
+                      onMouseDown={(e) => {
+                        if (e.button === 0) {
+                          setIsDragging(true);
+                          handleScrub(e.clientX, waveformContainerRef.current!);
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        setIsDragging(true);
+                        if (e.touches[0]) {
+                          handleScrub(e.touches[0].clientX, waveformContainerRef.current!);
+                        }
+                      }}
                       onMouseMove={handleWaveformMouseMove}
                       onMouseEnter={() => setIsHoveringWaveform(true)}
                       onMouseLeave={() => setIsHoveringWaveform(false)}
                       className="relative h-20 sm:h-24 flex items-end gap-[3px] sm:gap-1 cursor-pointer select-none group pt-4"
                     >
+                      {/* Active 4-Bar Loop Region Highlight */}
+                      {isLooping && duration > 0 && loopEnd > loopStart && (
+                        <div 
+                          className="absolute top-0 bottom-0 bg-purple-500/20 border-x-2 border-purple-400/80 z-10 pointer-events-none rounded transition-all"
+                          style={{
+                            left: `${(loopStart / duration) * 100}%`,
+                            width: `${((loopEnd - loopStart) / duration) * 100}%`,
+                          }}
+                        >
+                          <span className="absolute -top-4 left-1 text-[9px] font-mono font-bold text-purple-300 bg-purple-950/90 px-1 py-0.2 rounded">
+                            4-BAR LOOP
+                          </span>
+                        </div>
+                      )}
+
                       {/* Hover seeker line */}
                       {isHoveringWaveform && (
                         <div 
@@ -307,60 +503,133 @@ export default function AudioPlayer() {
                       })}
                     </div>
                   </div>
+
+                  {/* Embedded Live Playback Controls */}
+                  <LivePlaybackControls />
                 </div>
               )}
 
-              {/* Tab 2: Up Next Queue View */}
+              {/* Tab 2: Modifiers & DSP View */}
+              {activeDrawerTab === 'modifiers' && (
+                <div className="space-y-6">
+                  <LivePlaybackControls />
+                  <AudioVisualizer height={160} showControls={true} />
+                </div>
+              )}
+
+              {/* Tab 3: Up Next Queue View */}
               {activeDrawerTab === 'queue' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-neutral-400 font-mono pb-2 border-b border-neutral-900">
-                    <span>NOW PLAYING & UPCOMING PLAYLIST</span>
-                    <span>{queue.length} Tracks in Flow</span>
+                <div className="space-y-4">
+                  {/* Dynamic Control Area: Continuous Playback Toggle & Clean up */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-neutral-900">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider">
+                        Now Playing & Upcoming Playlist ({queue.length} Beats)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {/* Feature 12 — Continuous Playback Autoplay Switch */}
+                      <button
+                        onClick={() => setContinuousPlaybackEnabled(!continuousPlaybackEnabled)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                          continuousPlaybackEnabled
+                            ? 'bg-emerald-600 border border-emerald-500 text-white shadow-md shadow-emerald-600/20 font-extrabold'
+                            : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white'
+                        }`}
+                        title="Automatically plays the next beat in queue when the current one finishes"
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${continuousPlaybackEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-600'}`} />
+                        Continuous Playback: {continuousPlaybackEnabled ? 'ON' : 'OFF'}
+                      </button>
+
+                      {queue.length > 0 && (
+                        <button
+                          onClick={() => clearQueue()}
+                          className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-red-950/30 hover:bg-red-900/20 border border-red-900/30 text-red-400 hover:text-red-300 transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Clear Queue
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="max-h-[360px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-neutral-900/60">
-                    {queue.map((item, idx) => {
-                      const isCurrent = idx === queueIndex;
-                      return (
-                        <div
-                          key={`${item.id}_${idx}`}
-                          onClick={() => playTrack(item, queue, idx)}
-                          className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all ${
-                            isCurrent 
-                              ? 'bg-purple-950/40 border border-purple-500/40 text-white' 
-                              : 'hover:bg-neutral-900/70 text-neutral-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="font-mono text-xs font-bold text-neutral-500 w-6">
-                              {String(idx + 1).padStart(2, '0')}
-                            </span>
-                            <div className="w-9 h-9 rounded-lg overflow-hidden bg-neutral-900 shrink-0">
-                              <img src={item.coverArtUrl || displayCover} alt={item.title} className="w-full h-full object-cover" />
-                            </div>
-                            <div className="min-w-0">
-                              <span className={`text-sm font-bold truncate block ${isCurrent ? 'text-purple-400 font-extrabold' : 'text-white'}`}>
-                                {item.title}
+                  {/* Feature 11 — Queue List Representation */}
+                  <div className="max-h-[360px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-neutral-900/60 scrollbar-thin scrollbar-thumb-neutral-850">
+                    {queue.length === 0 ? (
+                      <div className="text-center py-16 text-neutral-500 text-xs font-mono">
+                        Your listening queue is empty. Explore the Marketplace and tap "Add to Queue" on beats to fill this up!
+                      </div>
+                    ) : (
+                      queue.map((item, idx) => {
+                        const isCurrent = idx === queueIndex;
+                        return (
+                          <div
+                            key={`${item.id}_${idx}`}
+                            onClick={() => playTrack(item, queue, idx)}
+                            className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all ${
+                              isCurrent 
+                                ? 'bg-purple-950/30 border border-purple-500/30 text-white' 
+                                : 'hover:bg-neutral-900/60 text-neutral-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="font-mono text-xs font-bold text-neutral-500 w-6 shrink-0">
+                                {String(idx + 1).padStart(2, '0')}
                               </span>
-                              <span className="text-[11px] text-neutral-500 block truncate">
-                                {item.artist} {item.type === 'BEAT_PACK_PREVIEW' ? '• Beat Pack Preview' : ''}
-                              </span>
+                              <div className="w-9 h-9 rounded-lg overflow-hidden bg-neutral-900 shrink-0 border border-neutral-850">
+                                <img src={item.coverArtUrl || displayCover} alt={item.title} className="w-full h-full object-cover" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className={`text-sm font-bold truncate block ${isCurrent ? 'text-purple-400 font-extrabold' : 'text-white'}`}>
+                                  {item.title}
+                                </span>
+                                <span className="text-[11px] text-neutral-500 block truncate">
+                                  {item.artist} {item.type === 'BEAT_PACK_PREVIEW' ? '• Beat Pack Preview' : ''}
+                                </span>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex items-center gap-3 shrink-0">
-                            {isCurrent && isPlaying && (
-                              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold animate-pulse">
-                                PLAYING
-                              </span>
-                            )}
-                            <button className="p-2 rounded-lg text-neutral-400 hover:text-white">
-                              {isCurrent && isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                            </button>
+                            <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {isCurrent && isPlaying && (
+                                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold animate-pulse">
+                                  PLAYING
+                                </span>
+                              )}
+
+                              {/* Up/Down Reordering Buttons (Touch Safe iPad Controls) */}
+                              <div className="flex items-center border border-neutral-900 bg-neutral-950/60 rounded-lg p-0.5 shrink-0">
+                                <button
+                                  disabled={idx === 0}
+                                  onClick={() => reorderQueue(idx, idx - 1)}
+                                  className="p-1 rounded text-neutral-500 hover:text-white disabled:opacity-20 disabled:hover:text-neutral-500 transition-colors cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  disabled={idx === queue.length - 1}
+                                  onClick={() => reorderQueue(idx, idx + 1)}
+                                  className="p-1 rounded text-neutral-500 hover:text-white disabled:opacity-20 disabled:hover:text-neutral-500 transition-colors cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Remove individual track button */}
+                              <button
+                                onClick={() => removeFromQueue(idx)}
+                                className="p-2 rounded-lg bg-neutral-900/60 hover:bg-red-950/30 text-neutral-400 hover:text-red-400 border border-neutral-800/40 hover:border-red-900/30 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                title="Remove from queue"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
@@ -389,8 +658,20 @@ export default function AudioPlayer() {
 
         {/* Micro Waveform / Progress Scrub Header Line */}
         <div 
-          onClick={handleWaveformClick}
-          className="relative h-2 w-full bg-neutral-900/90 cursor-pointer group hover:h-3 transition-all duration-150 overflow-hidden"
+          ref={microScrubberRef}
+          onMouseDown={(e) => {
+            if (e.button === 0) {
+              setIsDraggingMicro(true);
+              handleScrub(e.clientX, microScrubberRef.current!);
+            }
+          }}
+          onTouchStart={(e) => {
+            setIsDraggingMicro(true);
+            if (e.touches[0]) {
+              handleScrub(e.touches[0].clientX, microScrubberRef.current!);
+            }
+          }}
+          className="relative h-2 w-full bg-neutral-900/90 cursor-pointer group hover:h-3.5 transition-all duration-150 overflow-hidden"
           title="Scrub Track Position"
         >
           {/* Buffered Background Bar */}
@@ -398,6 +679,17 @@ export default function AudioPlayer() {
             className="absolute top-0 bottom-0 left-0 bg-neutral-700/60 transition-all duration-200"
             style={{ width: `${bufferedPercent}%` }}
           />
+
+          {/* Active 4-Bar Loop Region Highlight on Micro Scrubber */}
+          {isLooping && duration > 0 && loopEnd > loopStart && (
+            <div 
+              className="absolute top-0 bottom-0 bg-purple-500/40 border-x border-purple-300 z-10 pointer-events-none"
+              style={{
+                left: `${(loopStart / duration) * 100}%`,
+                width: `${((loopEnd - loopStart) / duration) * 100}%`,
+              }}
+            />
+          )}
 
           {/* Active Playback Progress Fill */}
           <div 
@@ -412,7 +704,7 @@ export default function AudioPlayer() {
         {/* Player Controls Container */}
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
           {/* Left Column: Artwork & Track Info */}
-          <div className="flex items-center gap-3 min-w-0 max-w-[32%] sm:max-w-[280px]">
+          <div className="flex items-center gap-3 min-w-0 max-w-[42%] sm:max-w-[340px]">
             <div 
               onClick={() => setIsExpanded(!isExpanded)}
               className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl overflow-hidden bg-neutral-900 border border-purple-900/40 shrink-0 cursor-pointer group shadow-md"
@@ -433,7 +725,7 @@ export default function AudioPlayer() {
               </div>
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs sm:text-sm font-extrabold text-white truncate block tracking-tight">
                   {displayTitle}
@@ -447,6 +739,31 @@ export default function AudioPlayer() {
               <span className="text-[11px] font-bold text-neutral-400 truncate block mt-0.5">
                 {displayProducer}
               </span>
+            </div>
+
+            {/* Quick Favorites & Sharing Actions */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-1">
+              <button
+                onClick={() => currentTrack && toggleFavorite(currentTrack.id)}
+                className={`p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer ${
+                  currentTrack && favorites.includes(currentTrack.id) ? 'text-red-500' : 'text-neutral-400 hover:text-white'
+                }`}
+                title={currentTrack && favorites.includes(currentTrack.id) ? "Remove from wishlist" : "Add to wishlist"}
+              >
+                <Heart className={`w-3.5 h-3.5 ${currentTrack && favorites.includes(currentTrack.id) ? 'fill-current' : ''}`} />
+              </button>
+              <button
+                onClick={handleSharePlayer}
+                className="p-1.5 rounded-lg hover:bg-neutral-900 text-neutral-400 hover:text-white transition-colors relative cursor-pointer"
+                title="Share / Copy Beat Link"
+              >
+                {copiedPlayer && (
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-purple-600 text-[9px] font-mono font-bold text-white px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap animate-bounce z-50">
+                    COPIED!
+                  </span>
+                )}
+                <Share2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 

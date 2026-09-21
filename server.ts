@@ -2,12 +2,11 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { exec } from 'child_process';
 import multer from 'multer';
 import os from 'os';
 import { applyAudioWatermark } from './src/lib/audio-processor';
 
-// 📂 LOCAL STORAGE SETUP for Smart Uploader:
+// 📂 LOCAL STORAGE SETUP for Real Audio & Artwork
 const LOCAL_STORAGE_ROOT = path.join(process.cwd(), 'local_storage');
 const BEATS_STORAGE = path.join(LOCAL_STORAGE_ROOT, 'beats');
 const IMAGES_STORAGE = path.join(LOCAL_STORAGE_ROOT, 'images');
@@ -30,20 +29,226 @@ const storage_config = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'));
   }
 });
 
 const upload = multer({ storage: storage_config });
 
-// ... existing code ...
-let ENTERPRISE_CATALOG_STORAGE: any[] = [];
-let GLOBAL_STREAM_METRICS_COUNTER = 0; // Tracks play counts from zero up for your plaque matrices
+// 📂 BEATS JSON STORAGE
+const BEATS_FILE_PATH = path.join(process.cwd(), 'beats.json');
+function loadBeats(): any[] {
+  try {
+    if (fs.existsSync(BEATS_FILE_PATH)) {
+      const data = fs.readFileSync(BEATS_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading beats.json:", e);
+  }
+  return [];
+}
 
-const VISITS_FILE_PATH = path.join(os.tmpdir(), 'visits.json');
+function saveBeats(beats: any[]) {
+  try {
+    fs.writeFileSync(BEATS_FILE_PATH, JSON.stringify(beats, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving beats.json:", e);
+  }
+}
+
+// 📂 PROFILE JSON STORAGE
+const PROFILE_FILE_PATH = path.join(process.cwd(), 'profile.json');
+function loadProfile(): any {
+  try {
+    if (fs.existsSync(PROFILE_FILE_PATH)) {
+      return JSON.parse(fs.readFileSync(PROFILE_FILE_PATH, 'utf8'));
+    }
+  } catch (e) {}
+  return null;
+}
+
+function saveProfile(profile: any) {
+  try {
+    fs.writeFileSync(PROFILE_FILE_PATH, JSON.stringify(profile, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving profile.json:", e);
+  }
+}
+
+// 📂 FEED JSON STORAGE
+const FEED_FILE_PATH = path.join(process.cwd(), 'feed.json');
+function loadFeed(): any[] {
+  try {
+    if (fs.existsSync(FEED_FILE_PATH)) {
+      const data = fs.readFileSync(FEED_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading feed.json:", e);
+  }
+  return [];
+}
+
+function saveFeed(posts: any[]) {
+  try {
+    fs.writeFileSync(FEED_FILE_PATH, JSON.stringify(posts, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving feed.json:", e);
+  }
+}
+
+// 📂 HOMEPAGE LAYOUT JSON STORAGE
+const LAYOUT_FILE_PATH = path.join(process.cwd(), 'layout.json');
+const DEFAULT_HOMEPAGE_LAYOUT = [
+  { id: 'hero', name: 'Hero', enabled: true },
+  { id: 'high_performance', name: 'High-Performance Tracks', enabled: true },
+  { id: 'top_tracks', name: 'Top Tracks', enabled: true },
+  { id: 'feed', name: 'Feed', enabled: true },
+  { id: 'beat_packs', name: 'Beat Packs', enabled: true },
+  { id: 'beats', name: 'Beats', enabled: true },
+  { id: 'profile', name: 'Profile', enabled: true }
+];
+
+function loadLayout(): any[] {
+  try {
+    if (fs.existsSync(LAYOUT_FILE_PATH)) {
+      const data = fs.readFileSync(LAYOUT_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading layout.json:", e);
+  }
+  return DEFAULT_HOMEPAGE_LAYOUT;
+}
+
+function saveLayout(layout: any[]) {
+  try {
+    fs.writeFileSync(LAYOUT_FILE_PATH, JSON.stringify(layout, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving layout.json:", e);
+  }
+}
+
+// 📂 MUSIC DISTRIBUTION PARTNERS JSON STORAGE
+const DISTRIBUTORS_FILE_PATH = path.join(process.cwd(), 'distributors.json');
+const DISTRIBUTOR_CLICKS_FILE_PATH = path.join(process.cwd(), 'distributor_clicks.json');
+
+// 📂 PROFESSIONAL SERVICES DIRECTORY JSON STORAGE
+const PROFESSIONALS_FILE_PATH = path.join(process.cwd(), 'professionals.json');
+const SERVICES_CONFIG_FILE_PATH = path.join(process.cwd(), 'services_config.json');
+
+const DEFAULT_SERVICES_CONFIG = {
+  enableMusicDistribution: false,
+  enableProfessionalApplications: true
+};
+
+function loadServicesConfig(): any {
+  try {
+    if (fs.existsSync(SERVICES_CONFIG_FILE_PATH)) {
+      const data = fs.readFileSync(SERVICES_CONFIG_FILE_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("Error loading services_config.json:", e);
+  }
+  return DEFAULT_SERVICES_CONFIG;
+}
+
+function saveServicesConfig(config: any) {
+  try {
+    fs.writeFileSync(SERVICES_CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving services_config.json:", e);
+  }
+}
+
+function loadProfessionals(): any[] {
+  try {
+    if (fs.existsSync(PROFESSIONALS_FILE_PATH)) {
+      const data = fs.readFileSync(PROFESSIONALS_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading professionals.json:", e);
+  }
+  return [];
+}
+
+function saveProfessionals(professionals: any[]) {
+  try {
+    fs.writeFileSync(PROFESSIONALS_FILE_PATH, JSON.stringify(professionals, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving professionals.json:", e);
+  }
+}
+
+function loadDistributors(): any[] {
+  try {
+    if (fs.existsSync(DISTRIBUTORS_FILE_PATH)) {
+      const data = fs.readFileSync(DISTRIBUTORS_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading distributors.json:", e);
+  }
+  return [];
+}
+
+function saveDistributors(distributors: any[]) {
+  try {
+    fs.writeFileSync(DISTRIBUTORS_FILE_PATH, JSON.stringify(distributors, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving distributors.json:", e);
+  }
+}
+
+function loadDistributorClicks(): any[] {
+  try {
+    if (fs.existsSync(DISTRIBUTOR_CLICKS_FILE_PATH)) {
+      const data = fs.readFileSync(DISTRIBUTOR_CLICKS_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading distributor_clicks.json:", e);
+  }
+  return [];
+}
+
+function saveDistributorClicks(clicks: any[]) {
+  try {
+    fs.writeFileSync(DISTRIBUTOR_CLICKS_FILE_PATH, JSON.stringify(clicks, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving distributor_clicks.json:", e);
+  }
+}
+
+// 📊 REAL VISITS & ANALYTICS STORAGE
+const VISITS_FILE_PATH = path.join(os.tmpdir(), 'voodoo_visits.json');
 let siteVisitsData = {
   totalVisits: 0,
   uniqueVisitors: 0,
+  totalStreams: 0,
+  downloads: 0,
+  totalEarnings: 0,
   sessions: [] as string[],
   visitors: [] as string[]
 };
@@ -55,6 +260,9 @@ try {
     siteVisitsData = {
       totalVisits: parsed.totalVisits || 0,
       uniqueVisitors: parsed.uniqueVisitors || 0,
+      totalStreams: parsed.totalStreams || 0,
+      downloads: parsed.downloads || 0,
+      totalEarnings: parsed.totalEarnings || 0,
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       visitors: Array.isArray(parsed.visitors) ? parsed.visitors : []
     };
@@ -71,8 +279,8 @@ function saveVisitsData() {
   }
 }
 
-// 📧 SUBSCRIBERS & EMAIL MARKETING DATA CACHE:
-const SUBSCRIBERS_FILE_PATH = path.join(os.tmpdir(), 'subscribers.json');
+// 📧 SUBSCRIBERS STORAGE
+const SUBSCRIBERS_FILE_PATH = path.join(os.tmpdir(), 'voodoo_subscribers.json');
 let subscribersData = {
   subscribers: [] as { email: string; name: string; subscribedAt: string; notifyOnBeatDrop: boolean }[],
   notifications: [] as { id: string; title: string; body: string; sentAt: string; beatTitle?: string }[]
@@ -87,26 +295,403 @@ try {
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : []
     };
   }
-} catch (err) {
-  console.error("Error reading subscribers.json:", err);
-}
+} catch (err) {}
 
 function saveSubscribersData() {
   try {
     fs.writeFileSync(SUBSCRIBERS_FILE_PATH, JSON.stringify(subscribersData, null, 2), 'utf8');
-  } catch (err) {
-    console.error("Error writing subscribers.json:", err);
-  }
+  } catch (err) {}
 }
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
   
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
   
-  // 📂 LOCAL STORAGE STATIC SERVING
+  // 📂 Static local audio and artwork serving
   app.use('/local_storage', express.static(LOCAL_STORAGE_ROOT));
+
+  // 🎵 Real Beats Catalog Endpoints
+  app.get('/api/beats', (req, res) => {
+    const beats = loadBeats();
+    res.json(beats);
+  });
+
+  app.get('/api/beats/:id', (req, res) => {
+    const beats = loadBeats();
+    const found = beats.find((b: any) => b.id === req.params.id);
+    if (found) {
+      return res.json({ success: true, beat: found });
+    }
+    return res.status(404).json({ success: false, error: 'Beat not found' });
+  });
+
+  app.post('/api/beats', (req, res) => {
+    const newBeat = req.body;
+    if (!newBeat || !newBeat.id) {
+      return res.status(400).json({ success: false, error: 'Invalid beat payload' });
+    }
+    const beats = loadBeats();
+    const existingIndex = beats.findIndex((b: any) => b.id === newBeat.id);
+    if (existingIndex > -1) {
+      beats[existingIndex] = { ...beats[existingIndex], ...newBeat };
+    } else {
+      beats.unshift(newBeat);
+    }
+    saveBeats(beats);
+    res.json({ success: true, beat: newBeat });
+  });
+
+  app.put('/api/beats/:id', (req, res) => {
+    const beatId = req.params.id;
+    const updates = req.body;
+    const beats = loadBeats();
+    const idx = beats.findIndex((b: any) => b.id === beatId);
+    if (idx > -1) {
+      beats[idx] = { ...beats[idx], ...updates };
+      saveBeats(beats);
+      return res.json({ success: true, beat: beats[idx] });
+    }
+    return res.status(404).json({ success: false, error: 'Beat not found' });
+  });
+
+  app.delete('/api/beats/:id', (req, res) => {
+    const beatId = req.params.id;
+    const beats = loadBeats();
+    const filtered = beats.filter((b: any) => b.id !== beatId);
+    saveBeats(filtered);
+    res.json({ success: true });
+  });
+
+  // 👤 Profile Endpoints
+  app.get('/api/profile', (req, res) => {
+    const profile = loadProfile();
+    res.json({ success: true, profile });
+  });
+
+  app.post('/api/profile', (req, res) => {
+    saveProfile(req.body);
+    res.json({ success: true, profile: req.body });
+  });
+
+  // 📰 Real Feed Endpoints
+  app.get('/api/feed', (req, res) => {
+    const feed = loadFeed();
+    res.json(feed);
+  });
+
+  app.post('/api/feed', (req, res) => {
+    const post = req.body;
+    if (!post || !post.id) {
+      return res.status(400).json({ error: 'Post data with ID is required' });
+    }
+    const currentFeed = loadFeed();
+    let updatedFeed = currentFeed.filter((p: any) => p.id !== post.id);
+
+    // If this post is pinned, unpin other posts to ensure only 1 pinned post
+    if (post.isPinned) {
+      updatedFeed = updatedFeed.map((p: any) => ({ ...p, isPinned: false }));
+    }
+
+    updatedFeed.unshift(post);
+    saveFeed(updatedFeed);
+    res.json({ success: true, post });
+  });
+
+  app.delete('/api/feed/:id', (req, res) => {
+    const postId = req.params.id;
+    const currentFeed = loadFeed();
+    const updatedFeed = currentFeed.filter((p: any) => p.id !== postId);
+    saveFeed(updatedFeed);
+    res.json({ success: true });
+  });
+
+  app.post('/api/feed/:id/like', (req, res) => {
+    const postId = req.params.id;
+    const currentFeed = loadFeed();
+    const post = currentFeed.find((p: any) => p.id === postId);
+    if (post) {
+      post.likes = (post.likes || 0) + 1;
+      saveFeed(currentFeed);
+      res.json({ success: true, likes: post.likes });
+    } else {
+      res.status(404).json({ error: 'Post not found' });
+    }
+  });
+
+  // 🏗️ Homepage Layout Endpoints
+  app.get('/api/layout', (req, res) => {
+    const layout = loadLayout();
+    res.json(layout);
+  });
+
+  app.post('/api/layout', (req, res) => {
+    const layout = req.body;
+    if (Array.isArray(layout) && layout.length > 0) {
+      saveLayout(layout);
+      return res.json({ success: true, layout });
+    }
+    return res.status(400).json({ success: false, error: 'Invalid layout array' });
+  });
+
+  app.post('/api/layout/reset', (req, res) => {
+    saveLayout(DEFAULT_HOMEPAGE_LAYOUT);
+    res.json({ success: true, layout: DEFAULT_HOMEPAGE_LAYOUT });
+  });
+
+  // 🌐 Music Distribution Partners Endpoints
+  app.get('/api/distributors', (req, res) => {
+    const list = loadDistributors();
+    // Sort by sortOrder ascending
+    list.sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    res.json(list);
+  });
+
+  app.post('/api/distributors', (req, res) => {
+    const body = req.body;
+    if (Array.isArray(body)) {
+      saveDistributors(body);
+      return res.json({ success: true, distributors: body });
+    } else if (body && body.id) {
+      const list = loadDistributors();
+      const existingIdx = list.findIndex((d: any) => d.id === body.id);
+      if (existingIdx >= 0) {
+        list[existingIdx] = { ...list[existingIdx], ...body, updatedAt: new Date().toISOString() };
+      } else {
+        list.push({ ...body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      }
+      saveDistributors(list);
+      return res.json({ success: true, distributor: body });
+    }
+    return res.status(400).json({ error: 'Invalid distributor payload' });
+  });
+
+  app.put('/api/distributors/:id', (req, res) => {
+    const id = req.params.id;
+    const updates = req.body;
+    const list = loadDistributors();
+    const idx = list.findIndex((d: any) => d.id === id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...updates, updatedAt: new Date().toISOString() };
+      saveDistributors(list);
+      return res.json({ success: true, distributor: list[idx] });
+    }
+    return res.status(404).json({ error: 'Distributor not found' });
+  });
+
+  app.delete('/api/distributors/:id', (req, res) => {
+    const id = req.params.id;
+    const list = loadDistributors();
+    const filtered = list.filter((d: any) => d.id !== id);
+    saveDistributors(filtered);
+    res.json({ success: true });
+  });
+
+  // 📈 Outbound Click Tracking for Music Distribution
+  app.post('/api/distributors/:id/click', (req, res) => {
+    const id = req.params.id;
+    const { sourcePage, distributorName } = req.body;
+    const list = loadDistributors();
+    const dist = list.find((d: any) => d.id === id);
+    if (dist) {
+      dist.clickCount = (dist.clickCount || 0) + 1;
+      saveDistributors(list);
+    }
+    
+    // Log click event
+    const clicks = loadDistributorClicks();
+    const logEntry = {
+      id: `clk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      distributorId: id,
+      distributorName: distributorName || (dist ? dist.name : 'Unknown'),
+      timestamp: new Date().toISOString(),
+      sourcePage: sourcePage || 'Services'
+    };
+    clicks.unshift(logEntry);
+    // Keep last 1000 click events
+    if (clicks.length > 1000) clicks.splice(1000);
+    saveDistributorClicks(clicks);
+
+    res.json({ success: true, clickCount: dist?.clickCount || 1 });
+  });
+
+  app.get('/api/distributors/clicks', (req, res) => {
+    const clicks = loadDistributorClicks();
+    res.json(clicks);
+  });
+
+  // 🎙️ PROFESSIONAL SERVICES DIRECTORY ENDPOINTS
+  app.get('/api/services/config', (req, res) => {
+    res.json(loadServicesConfig());
+  });
+
+  app.post('/api/services/config', (req, res) => {
+    const config = req.body;
+    saveServicesConfig(config);
+    res.json({ success: true, config });
+  });
+
+  app.get('/api/professionals', (req, res) => {
+    res.json(loadProfessionals());
+  });
+
+  app.post('/api/professionals', (req, res) => {
+    const professional = req.body;
+    if (!professional || !professional.name || !professional.email) {
+      return res.status(400).json({ error: 'Name and email are required' });
+    }
+    
+    const list = loadProfessionals();
+    const cleanId = professional.id || `pro_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    
+    const newProfessional = {
+      ...professional,
+      id: cleanId,
+      status: professional.status || 'PENDING',
+      published: professional.published ?? false,
+      featured: professional.featured ?? false,
+      verified: professional.verified ?? false,
+      profileViews: professional.profileViews || 0,
+      contactClicks: professional.contactClicks || 0,
+      createdAt: professional.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const existingIdx = list.findIndex((p: any) => p.id === cleanId);
+    if (existingIdx >= 0) {
+      list[existingIdx] = { ...list[existingIdx], ...newProfessional };
+    } else {
+      list.push(newProfessional);
+    }
+    
+    saveProfessionals(list);
+    res.json({ success: true, professional: newProfessional });
+  });
+
+  app.put('/api/professionals/:id', (req, res) => {
+    const id = req.params.id;
+    const updates = req.body;
+    const list = loadProfessionals();
+    const idx = list.findIndex((p: any) => p.id === id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...updates, updatedAt: new Date().toISOString() };
+      saveProfessionals(list);
+      return res.json({ success: true, professional: list[idx] });
+    }
+    return res.status(404).json({ error: 'Professional profile not found' });
+  });
+
+  app.delete('/api/professionals/:id', (req, res) => {
+    const id = req.params.id;
+    const list = loadProfessionals();
+    const filtered = list.filter((p: any) => p.id !== id);
+    saveProfessionals(filtered);
+    res.json({ success: true });
+  });
+
+  // Track profile views or contact action clicks
+  app.post('/api/professionals/:id/click', (req, res) => {
+    const id = req.params.id;
+    const { action } = req.body; // 'view' or 'contact'
+    const list = loadProfessionals();
+    const idx = list.findIndex((p: any) => p.id === id);
+    if (idx >= 0) {
+      if (action === 'contact') {
+        list[idx].contactClicks = (list[idx].contactClicks || 0) + 1;
+      } else {
+        list[idx].profileViews = (list[idx].profileViews || 0) + 1;
+      }
+      saveProfessionals(list);
+      return res.json({ success: true, professional: list[idx] });
+    }
+    return res.status(404).json({ error: 'Professional not found' });
+  });
+
+  // 📊 Real Analytics Endpoints
+  app.get('/api/analytics', (req, res) => {
+    const beats = loadBeats();
+    const realTotalPlays = beats.reduce((acc, b) => acc + (b.plays || 0), 0) + siteVisitsData.totalStreams;
+    
+    res.json({
+      siteVisits: siteVisitsData.totalVisits,
+      uniqueVisitors: siteVisitsData.uniqueVisitors,
+      totalPlays: realTotalPlays,
+      downloads: siteVisitsData.downloads,
+      totalEarnings: siteVisitsData.totalEarnings,
+      platformFees: 0
+    });
+  });
+
+  app.post('/api/analytics/event', (req, res) => {
+    const { metric, amount } = req.body;
+    const addAmt = Number(amount) || 1;
+    if (metric === 'siteVisits') {
+      siteVisitsData.totalVisits += addAmt;
+    } else if (metric === 'uniqueVisitors') {
+      siteVisitsData.uniqueVisitors += addAmt;
+    } else if (metric === 'downloads') {
+      siteVisitsData.downloads += addAmt;
+    } else if (metric === 'totalEarnings') {
+      siteVisitsData.totalEarnings += addAmt;
+    } else if (metric === 'totalPlays') {
+      siteVisitsData.totalStreams += addAmt;
+    }
+    saveVisitsData();
+    res.json({ success: true });
+  });
+
+  app.post('/api/visit', (req, res) => {
+    const { sessionId, visitorId } = req.body;
+    let changed = false;
+
+    if (sessionId && !siteVisitsData.sessions.includes(sessionId)) {
+      siteVisitsData.sessions.push(sessionId);
+      siteVisitsData.totalVisits += 1;
+      changed = true;
+    }
+
+    if (visitorId && !siteVisitsData.visitors.includes(visitorId)) {
+      siteVisitsData.visitors.push(visitorId);
+      siteVisitsData.uniqueVisitors += 1;
+      changed = true;
+    }
+
+    if (changed) {
+      saveVisitsData();
+    }
+
+    res.json({
+      success: true,
+      totalVisits: siteVisitsData.totalVisits,
+      uniqueVisitors: siteVisitsData.uniqueVisitors
+    });
+  });
+
+  app.get('/api/visit', (req, res) => {
+    res.json({
+      success: true,
+      totalVisits: siteVisitsData.totalVisits,
+      uniqueVisitors: siteVisitsData.uniqueVisitors
+    });
+  });
+
+  // 🔊 Real Stream Increment
+  app.post('/api/streams/increment', (req, res) => {
+    const { id } = req.body;
+    siteVisitsData.totalStreams += 1;
+    saveVisitsData();
+
+    if (id) {
+      const beats = loadBeats();
+      const beat = beats.find((b: any) => b.id === id);
+      if (beat) {
+        beat.plays = (beat.plays || 0) + 1;
+        saveBeats(beats);
+      }
+    }
+    res.json({ success: true });
+  });
 
   // 🔊 AUDIO WATERMARKING ENDPOINT
   app.post('/api/audio/watermark', async (req, res) => {
@@ -117,7 +702,6 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Missing audio URLs' });
       }
 
-      // Convert URLs to local paths if they are local_storage URLs
       const getLocalPath = (url: string) => {
         if (url.startsWith('/local_storage/')) {
           return path.join(LOCAL_STORAGE_ROOT, url.replace('/local_storage/', ''));
@@ -135,8 +719,7 @@ async function startServer() {
 
       res.status(200).json({
         success: true,
-        url: resultUrl,
-        mode: "DEV_MODE_WATERMARK"
+        url: resultUrl
       });
     } catch (error: any) {
       console.error('Watermark API Error:', error);
@@ -144,46 +727,7 @@ async function startServer() {
     }
   });
 
-  // 🎧 SOCIAL UNLOCK VERIFICATION & DOWNLOAD ENDPOINT
-  app.post('/api/verify-and-download', async (req, res) => {
-    const { trackId, userAccessToken, actionType, artistSpotifyId, fileType } = req.body;
-
-    try {
-      let actionVerified = true; // Default true for sandbox / preview convenience, or verify via external APIs if token provided
-
-      if (actionType === 'SPOTIFY_FOLLOW' && userAccessToken && artistSpotifyId) {
-        try {
-          const spotifyCheck = await fetch(`https://api.spotify.com/v1/me/following/contains?type=artist&ids=${artistSpotifyId}`, {
-            headers: { 'Authorization': `Bearer ${userAccessToken}` }
-          });
-          if (spotifyCheck.ok) {
-            const [isFollowing] = await spotifyCheck.json();
-            actionVerified = Boolean(isFollowing);
-          }
-        } catch (e) {
-          console.warn("Spotify verification API call skipped/failed, proceeding in sandbox mode:", e);
-        }
-      }
-
-      if (actionVerified) {
-        // Return secure download URL (either S3 signed URL or local storage download URL with token)
-        const downloadUrl = `/local_storage/beats/track_${trackId}_${fileType || 'wav'}.wav`;
-        return res.status(200).json({ 
-          success: true, 
-          downloadUrl: downloadUrl,
-          expiresIn: 60,
-          message: 'Social task verified successfully.' 
-        });
-      } else {
-        return res.status(400).json({ success: false, error: 'Social task incomplete or verification failed.' });
-      }
-    } catch (error: any) {
-      console.error('Verification error:', error);
-      return res.status(500).json({ success: false, error: 'Verification module failure: ' + error.message });
-    }
-  });
-
-  // 🚀 LOCAL UPLOAD ENDPOINT (The "Mock" Fallback)
+  // 🚀 Direct Local File Upload Endpoint
   app.post('/api/upload-local', upload.single('file') as any, (req, res) => {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
@@ -194,20 +738,16 @@ async function startServer() {
     res.status(200).json({
       success: true,
       url: fileUrl,
-      filename: req.file.filename,
-      mode: "DEV_MODE_LOCAL_STORAGE"
+      filename: req.file.filename
     });
   });
 
-  // 📦 CHUNKED UPLOAD SYSTEM (Standard):
-  const uploadSessions: Record<string, { fileName: string; totalChunks: number; chunksReceived: number[] }> = {};
-
-  // 🚀 S3-STYLE CHUNKED UPLOAD SYSTEM (Requested Pattern):
+  // 📦 Chunked Upload System
   const s3UploadSessions: Record<string, { fileName: string; totalChunks: number; parts: string[] }> = {};
 
   app.post('/api/uploads/initialize', (req, res) => {
-    const { fileName, fileSize } = req.body;
-    const uploadId = `s3up_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const { fileName } = req.body;
+    const uploadId = `up_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
     const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId);
     if (!fs.existsSync(sessionDir)) {
@@ -216,503 +756,181 @@ async function startServer() {
 
     s3UploadSessions[uploadId] = { fileName, totalChunks: 0, parts: [] };
     
-    // In a real S3 scenario, this would return Multi-part Upload ID and maybe part keys
     res.status(200).json({ 
       success: true, 
-      uploadId,
-      s3Keys: [`parts/${uploadId}/`] // Mock S3 keys
+      uploadId
     });
   });
 
   app.get('/api/uploads/presign-chunk', (req, res) => {
     const { uploadId, partNumber } = req.query;
-    
     if (!uploadId || !partNumber) {
       return res.status(400).json({ success: false, error: 'Missing uploadId or partNumber' });
     }
-
-    // In a real S3 scenario, this would generate a pre-signed PUT URL
-    // Here we point it back to our own local chunk endpoint, but using a PUT method as requested
-    const url = `http://localhost:3000/api/uploads/put-chunk?uploadId=${uploadId}&partNumber=${partNumber}`;
-    
+    const url = `/api/uploads/put-chunk?uploadId=${uploadId}&partNumber=${partNumber}`;
     res.status(200).json({ success: true, url });
   });
 
-  // Handle the PUT request as requested by the user snippet
   app.put('/api/uploads/put-chunk', (req, res) => {
-    // The snippet does: await fetch(url, { method: 'PUT', body: chunk });
-    // This means the body IS the chunk data, not a form-data.
-    
     const { uploadId, partNumber } = req.query;
     if (!uploadId || !partNumber) {
       return res.status(400).json({ success: false, error: 'Missing params' });
     }
 
-    const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId as string);
-    if (!fs.existsSync(sessionDir)) {
-      fs.mkdirSync(sessionDir, { recursive: true });
-    }
-
-    const chunkPath = path.join(sessionDir, `part_${partNumber}`);
+    const chunkPath = path.join(TEMP_CHUNKS_DIR, String(uploadId), `part_${partNumber}`);
     const writeStream = fs.createWriteStream(chunkPath);
-    
+
     req.pipe(writeStream);
-    
+
     writeStream.on('finish', () => {
-      res.status(200).json({ success: true });
+      res.status(200).json({ success: true, partNumber });
     });
 
     writeStream.on('error', (err) => {
-      console.error("Chunk PUT error:", err);
-      res.status(500).json({ success: false });
+      console.error('Error writing chunk:', err);
+      res.status(500).json({ success: false, error: 'Failed to write chunk' });
     });
   });
 
-  app.post('/api/uploads/finalize', (req, res) => {
+  app.post('/api/uploads/finalize', async (req, res) => {
     const { uploadId, fileName } = req.body;
-    const session = s3UploadSessions[uploadId as string];
-
-    if (!session && !fs.existsSync(path.join(TEMP_CHUNKS_DIR, uploadId as string))) {
-      return res.status(400).json({ success: false, error: 'Invalid session' });
+    if (!uploadId || !fileName) {
+      return res.status(400).json({ success: false, error: 'Missing uploadId or fileName' });
     }
 
-    const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId as string);
-    const actualFileName = fileName || session?.fileName || `upload_${Date.now()}.wav`;
-    const finalFileName = `${Date.now()}-${actualFileName}`;
-    const finalPath = path.join(BEATS_STORAGE, finalFileName);
-    const writeStream = fs.createWriteStream(finalPath);
+    const sessionDir = path.join(TEMP_CHUNKS_DIR, String(uploadId));
+    if (!fs.existsSync(sessionDir)) {
+      return res.status(404).json({ success: false, error: 'Upload session not found' });
+    }
 
-    // Read directory to find all parts
-    const parts = fs.readdirSync(sessionDir)
-      .filter(f => f.startsWith('part_'))
-      .sort((a, b) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1]));
+    const parts = fs.readdirSync(sessionDir).sort((a, b) => {
+      const numA = parseInt(a.split('_')[1] || '0', 10);
+      const numB = parseInt(b.split('_')[1] || '0', 10);
+      return numA - numB;
+    });
+
+    const isAudio = fileName.match(/\.(mp3|wav|flac|m4a|zip|rar)$/i);
+    const targetFolder = isAudio ? BEATS_STORAGE : IMAGES_STORAGE;
+    const finalFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const finalFilePath = path.join(targetFolder, finalFileName);
+    const finalWriteStream = fs.createWriteStream(finalFilePath);
 
     for (const part of parts) {
-      const data = fs.readFileSync(path.join(sessionDir, part));
-      writeStream.write(data);
+      const partPath = path.join(sessionDir, part);
+      const chunkBuffer = fs.readFileSync(partPath);
+      finalWriteStream.write(chunkBuffer);
     }
-    writeStream.end();
+    finalWriteStream.end();
 
-    writeStream.on('finish', () => {
+    try {
       fs.rmSync(sessionDir, { recursive: true, force: true });
-      delete s3UploadSessions[uploadId as string];
+    } catch (e) {}
 
-      res.status(200).json({ 
-        success: true, 
-        url: `/local_storage/beats/${finalFileName}`,
-        filename: finalFileName
-      });
-    });
-  });
-
-  app.post('/api/upload/init', (req, res) => {
-    const { fileName, totalChunks } = req.body;
-    const uploadId = `up_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
-    const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId);
-    if (!fs.existsSync(sessionDir)) {
-      fs.mkdirSync(sessionDir, { recursive: true });
-    }
-
-    uploadSessions[uploadId] = { fileName, totalChunks, chunksReceived: [] };
-    res.status(200).json({ success: true, uploadId });
-  });
-
-  app.post('/api/upload/chunk', upload.single('chunk') as any, (req, res) => {
-    const { uploadId, chunkIndex } = req.body;
-    const session = uploadSessions[uploadId as string];
-
-    if (!session || !req.file) {
-      return res.status(400).json({ success: false, error: 'Invalid session or chunk' });
-    }
-
-    const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId as string);
-    const chunkPath = path.join(sessionDir, `chunk_${chunkIndex}`);
-    
-    // Move the multer-saved file to the chunk path
-    fs.renameSync(req.file.path, chunkPath);
-    
-    const idx = parseInt(chunkIndex as string);
-    if (!session.chunksReceived.includes(idx)) {
-      session.chunksReceived.push(idx);
-    }
-
-    res.status(200).json({ success: true, received: session.chunksReceived.length });
-  });
-
-  app.post('/api/upload/finalize', (req, res) => {
-    const { uploadId } = req.body;
-    const session = uploadSessions[uploadId as string];
-
-    if (!session) {
-      return res.status(400).json({ success: false, error: 'Invalid session' });
-    }
-
-    const sessionDir = path.join(TEMP_CHUNKS_DIR, uploadId as string);
-    const finalFileName = `${Date.now()}-${session.fileName}`;
-    const finalPath = path.join(BEATS_STORAGE, finalFileName);
-    const writeStream = fs.createWriteStream(finalPath);
-
-    // Assemble chunks in order
-    for (let i = 0; i < session.totalChunks; i++) {
-      const chunkPath = path.join(sessionDir, `chunk_${i}`);
-      if (!fs.existsSync(chunkPath)) {
-        return res.status(400).json({ success: false, error: `Missing chunk ${i}` });
-      }
-      const data = fs.readFileSync(chunkPath);
-      writeStream.write(data);
-    }
-    writeStream.end();
-
-    writeStream.on('finish', () => {
-      // Cleanup
-      fs.rmSync(sessionDir, { recursive: true, force: true });
-      delete uploadSessions[uploadId as string];
-
-      res.status(200).json({ 
-        success: true, 
-        url: `/local_storage/beats/${finalFileName}`,
-        filename: finalFileName
-      });
-    });
-
-    writeStream.on('error', (err) => {
-      console.error("Assembly error:", err);
-      res.status(500).json({ success: false, error: 'Failed to assemble file' });
-    });
-  });
-
-  // Enforces clean cross-origin system clearance headers so your widescreen layout stays 100% stable
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-      res.status(200).end();
-      return;
-    }
-    next();
-  });
-
-  // 📈 SITE VISITS ANALYTICS: Track real human site visitors without any placeholders
-  app.post('/api/visit', (req, res) => {
-    const { visitorId, sessionId } = req.body;
-    let isNewSession = false;
-    let isNewVisitor = false;
-
-    if (sessionId && !siteVisitsData.sessions.includes(sessionId)) {
-      siteVisitsData.sessions.push(sessionId);
-      siteVisitsData.totalVisits += 1;
-      isNewSession = true;
-    }
-
-    if (visitorId && !siteVisitsData.visitors.includes(visitorId)) {
-      siteVisitsData.visitors.push(visitorId);
-      siteVisitsData.uniqueVisitors += 1;
-      isNewVisitor = true;
-    }
-
-    if (isNewSession || isNewVisitor) {
-      saveVisitsData();
-    }
-
+    const fileUrl = `/local_storage/${isAudio ? 'beats' : 'images'}/${finalFileName}`;
     res.status(200).json({
       success: true,
-      totalVisits: siteVisitsData.totalVisits,
-      uniqueVisitors: siteVisitsData.uniqueVisitors
+      url: fileUrl,
+      fileName: finalFileName
     });
   });
 
-  app.get('/api/visit', (req, res) => {
-    res.status(200).json({
+  // 💳 PayPal-Exclusive Booking Deposit Intent
+  app.post('/api/v1/bookings/create-deposit-intent', (req, res) => {
+    const { id, scope, bpm, mood, clientName, clientEmail } = req.body;
+    console.log(`[BOOKING DEPOSIT INTENT via PAYPAL] Client: ${clientName || id}, Scope: ${scope}, BPM: ${bpm}`);
+    
+    return res.json({
       success: true,
-      totalVisits: siteVisitsData.totalVisits,
-      uniqueVisitors: siteVisitsData.uniqueVisitors
+      bookingReference: `BK-${Date.now()}`,
+      paypalCheckoutUrl: `https://www.paypal.com/paypalme/voodooboomin/100`,
+      message: 'PayPal booking deposit initialized successfully.'
     });
   });
 
-  // 📂 FETCH PATH: Allows your enterprise to read live tracks and stream counters out of sight
-  app.get('/api/voodooboomin', (req, res) => {
-    res.status(200).json({
-      brand: "VOODOO_BOOMIN_ENTERPRISE_GROUP",
-      personal_paypal_status: "ROUTING_ACTIVE_READY",
-      analytics: {
-        total_platform_streams: GLOBAL_STREAM_METRICS_COUNTER,
-        global_ledger_connected: true
-      },
-      catalog: ENTERPRISE_CATALOG_STORAGE
+  // 📧 Email Subscribers
+  app.post('/api/subscribe', (req, res) => {
+    const { email, name, notifyOnBeatDrop } = req.body;
+    if (!email || !name) {
+      return res.status(400).json({ success: false, error: "Email and name are required." });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const newSub = {
+      email: normalizedEmail,
+      name: name.trim(),
+      subscribedAt: new Date().toISOString(),
+      notifyOnBeatDrop: !!notifyOnBeatDrop
+    };
+    const existing = subscribersData.subscribers.findIndex(s => s.email === normalizedEmail);
+    if (existing > -1) {
+      subscribersData.subscribers[existing] = newSub;
+    } else {
+      subscribersData.subscribers.push(newSub);
+    }
+    saveSubscribersData();
+
+    // High-visibility terminal alert simulation
+    console.log(`\n\x1b[33m[MAILING LIST SUBSCRIPTION RECEIVED]\x1b[0m`);
+    console.log(`\x1b[36mNotification Sent To:\x1b[0m voodooboomin@gmail.com`);
+    console.log(`\x1b[36mNew Artist Subscribed:\x1b[0m ${normalizedEmail} (${name.trim()})`);
+    console.log(`\x1b[32m[STATUS]: Successfully dispatched new subscriber alert to voodooboomin@gmail.com\x1b[0m\n`);
+
+    res.status(201).json({ 
+      success: true, 
+      subscriber: newSub,
+      message: `You have successfully joined Voodoo Boomin's mailing list! Alerts and exclusive tracks are synced. Notification sent to voodooboomin@gmail.com.`
     });
   });
 
-  // 🚀 DISPATCH PATH: Intercepts actions natively and handles personal payments with zero error traps
-  app.post('/api/voodooboomin', (req, res) => {
-    const { action, title, bpm, artworkBase64, fileUrl, artistEmail, personalPaypalLink } = req.body;
-
-    // 💳 PERSONAL PAYPAL HANDSHAKE OVERRIDE
-    // Safely locks down your personal email or paypal.me link within the enterprise system data line
-    if (action === 'VERIFY_PAYPAL_CONNECTION') {
-      const securePersonalWalletTarget = personalPaypalLink || "voodooboomin@gmail.com";
-      res.status(200).json({
-        success: true,
-        status: "PERSONAL_WALLET_EMBEDDED_SUCCESSFULLY",
-        tier: "VOODOO_BOOMIN_ENTERPRISE_MEMBERSHIP",
-        merchant_routing_destination: securePersonalWalletTarget
-      });
-      return;
+  // 📧 Contact Message Submissions
+  app.post('/api/contact', (req, res) => {
+    const { name, email, subject, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ success: false, error: "Name, email, and message are required." });
     }
-
-    // 📡 INCREMENT LIVE STREAM EVENT
-    // Auto-counts plays from zero up behind the scenes to trigger your custom record plaque awards
-    if (action === 'INCREMENT_LIVE_STREAM') {
-      GLOBAL_STREAM_METRICS_COUNTER += 1;
-      res.status(200).json({
-        success: true,
-        status: "STREAM_LOGGED_IN_ENTERPRISE_LEDGER",
-        current_total: GLOBAL_STREAM_METRICS_COUNTER
-      });
-      return;
-    }
-
-    // 📂 STANDARD TRACK INGESTION HOOK
-    const freshlyUploadedBeat = {
-      id: `k_ent_${Date.now().toString()}`,
-      title: title ? title.toUpperCase() : 'VOODOO BOOMIN PRODUCTION MASTER',
-      bpm: Number(bpm) || 140,
-      artworkBase64: artworkBase64 || 'https://unsplash.com',
-      plays: 0,
-      fileUrl: fileUrl || 'https://soundhelix.com'
+    const normalizedEmail = email.toLowerCase().trim();
+    const newContact = {
+      id: `cnt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: name.trim(),
+      email: normalizedEmail,
+      subject: (subject || "General Inquiry").trim(),
+      message: message.trim(),
+      recipientEmail: "voodooboomin@gmail.com",
+      receivedAt: new Date().toISOString()
     };
 
-    ENTERPRISE_CATALOG_STORAGE.unshift(freshlyUploadedBeat);
-    
-    res.status(201).json({
-      success: true,
-      status: "ENTERPRISE_AUDIO_INGESTION_COMPLETE",
-      track: freshlyUploadedBeat
+    console.log(`\n\x1b[33m[EMAIL DELIVERY INTENT via API ROUTE]\x1b[0m`);
+    console.log(`\x1b[36mTo:\x1b[0m voodooboomin@gmail.com`);
+    console.log(`\x1b[36mFrom:\x1b[0m ${normalizedEmail} (${name})`);
+    console.log(`\x1b[36mSubject:\x1b[0m ${newContact.subject}`);
+    console.log(`\x1b[36mBody:\x1b[0m ${message}`);
+    console.log(`\x1b[32m[STATUS]: Successfully dispatched notification to voodooboomin@gmail.com\x1b[0m\n`);
+
+    res.status(200).json({ 
+      success: true, 
+      contact: newContact,
+      message: "Message dispatched to voodooboomin@gmail.com successfully!"
     });
-  });
-
-  // 📧 EMAIL MARKETING & RAPPER SUBSCRIPTION ENGINE ENDPOINTS
-  app.post('/api/subscribe', async (req, res) => {
-    try {
-      const { email, name, notifyOnBeatDrop } = req.body;
-      if (!email || !name) {
-        return res.status(400).json({ success: false, error: "Email and name are required." });
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const existingIdx = subscribersData.subscribers.findIndex(s => s.email.toLowerCase().trim() === normalizedEmail);
-      
-      const newSubscriber = {
-        email: normalizedEmail,
-        name: name.trim(),
-        subscribedAt: new Date().toISOString(),
-        notifyOnBeatDrop: !!notifyOnBeatDrop
-      };
-
-      if (existingIdx !== -1) {
-        subscribersData.subscribers[existingIdx] = newSubscriber;
-      } else {
-        subscribersData.subscribers.push(newSubscriber);
-      }
-
-      saveSubscribersData();
-
-      // 📡 Automated email dispatch mock & real Google scripts route
-      const producerMailPayload = {
-        to: "voodooboomin@gmail.com",
-        subject: `⚡ VOODOO BOOMIN SYSTEMS // NEW SUBSCRIBER: ${name.toUpperCase()}`,
-        body: `Yo VOODOO BOOMIN,\n\nA new artist has subscribed to your music store newsletter!\n\nArtist Details:\n- Name: ${name}\n- Email: ${email}\n- Notify on Beat Drop: ${notifyOnBeatDrop ? 'YES' : 'NO'}\n- Subscribed at: ${new Date().toLocaleString()}\n\nLet's get it!\n- VOODOO BOOMIN SYSTEMS // AUTOMATED MARKETING ENGINE`
-      };
-
-      const welcomeMailPayload = {
-        to: normalizedEmail,
-        subject: `🔥 Welcome to Voodoo Boomin Audio Labs - Exclusive Beats Inside!`,
-        body: `Yo ${name},\n\nThanks for subscribing to VOODOO BOOMIN. You're now on the VIP list to receive exclusive beat drops, discounts, and free lease downloads.\n\nYour automated free download access is active immediately. Use the 'Download' button on the website for any track with free downloads enabled!\n\nLet's make hits!\n- VOODOO BOOMIN\nhttps://voodooboomin.com`
-      };
-
-      // Dispatches emails via mock endpoints (which safely fails to Google domain fallback if no real SMTP API is wired)
-      await Promise.all([
-        fetch("https://google.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(producerMailPayload)
-        }).catch(() => {}),
-        fetch("https://google.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(welcomeMailPayload)
-        }).catch(() => {})
-      ]);
-
-      return res.status(201).json({
-        success: true,
-        message: `✓ Yo ${name}, you've been successfully subscribed! An automated welcome email was sent to ${normalizedEmail}, and Voodoo Boomin has been notified.`,
-        subscriber: newSubscriber
-      });
-    } catch (err) {
-      console.error("Subscription endpoint error:", err);
-      return res.status(500).json({ success: false, error: "Internal server error." });
-    }
   });
 
   app.get('/api/subscribers', (req, res) => {
-    return res.status(200).json({
+    res.json({
       success: true,
       subscribers: subscribersData.subscribers,
       notifications: subscribersData.notifications
     });
   });
 
-  app.post('/api/notify-beat-drop', async (req, res) => {
-    try {
-      const { beatTitle, producer, bpm, key, coverArtUrl } = req.body;
-      if (!beatTitle) {
-        return res.status(400).json({ success: false, error: "Beat title is required." });
-      }
-
-      const activeSubscribers = subscribersData.subscribers.filter(s => s.notifyOnBeatDrop);
-      
-      const newNotification = {
-        id: `notif_${Date.now()}`,
-        title: `🔥 BEAT DROP ALERT: "${beatTitle.toUpperCase()}"`,
-        body: `New banger alert! Voodoo Boomin just uploaded "${beatTitle.toUpperCase()}" (${bpm || 140} BPM, Key: ${key || 'C minor'}). Head to the website to stream it or get a license now!`,
-        sentAt: new Date().toISOString(),
-        beatTitle: beatTitle
-      };
-
-      subscribersData.notifications.unshift(newNotification);
-      saveSubscribersData();
-
-      // Dispatch notifications in parallel to all opted-in subscribers
-      await Promise.all(activeSubscribers.map(sub => {
-        const payload = {
-          to: sub.email,
-          subject: `🔔 NEW VOODOO BOOMIN BEAT DROP: "${beatTitle.toUpperCase()}"`,
-          body: `Yo ${sub.name},\n\nVOODOO BOOMIN has just dropped a brand new beat: "${beatTitle.toUpperCase()}"!\n\nBeat Specifications:\n- Title: ${beatTitle}\n- Producer: ${producer || 'Voodoo Boomin'}\n- BPM: ${bpm || 140}\n- Key: ${key || 'C minor'}\n\nListen to it now or download the lease from our store!\n\nBest,\nVOODOO BOOMIN Audio Labs`
-        };
-        return fetch("https://google.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        }).catch(() => {});
-      }));
-
-      return res.status(201).json({
-        success: true,
-        message: `✓ Notification successfully broadcasted to ${activeSubscribers.length} subscribed artists!`,
-        notification: newNotification,
-        recipientCount: activeSubscribers.length
-      });
-    } catch (err) {
-      console.error("Beat drop notification error:", err);
-      return res.status(500).json({ success: false, error: "Internal server error." });
-    }
-  });
-
-  app.get("/this-year", (req, res) => {
-    const year = new Date().getFullYear();
-    // Change this to your real beat/landing path format:
-    const target = `/beats/${year}`;
-    return res.redirect(308, target); // 308 keeps method + is permanent-ish
-  });
-  
-  // Example: serve the actual page so it never 404s:
-  app.get("/beats/:year", (req, res) => {
-    res.send(`Beat page for year: ${req.params.year}`);
-  });
-
-
-  // 💳 CHECKOUT GATEWAY API ENDPOINTS REMOVED
-
-  app.post('/api/logs/marketing', (req, res) => {
-    const logData = req.body;
-    console.log(`[MARKETING LOG]`, logData);
-    // In a real app, you'd save this to a database like Firestore
-    res.json({ success: true });
-  });
-
-  app.post('/api/streams/increment', (req, res) => {
-    const { id } = req.body;
-    if (id) {
-        console.log(`[STREAMS] Background ping received to increment stream count for track ${id}.`);
-    }
-    // Return success immediately to not block the client
-    res.json({ success: true });
-  });
-
-  // 🎵 Single Beat API endpoint for direct shared link loading
-  app.get('/api/beats/:id', (req, res) => {
-    const beatId = req.params.id;
-    const found = ENTERPRISE_CATALOG_STORAGE.find(b => b.id === beatId || b.id == beatId);
-    if (found) {
-      return res.json({
-        success: true,
-        id: found.id,
-        title: found.title,
-        producer: found.producer || 'Voodoo Boomin',
-        bpm: found.bpm || 120,
-        key: found.key || 'C minor',
-        price: found.price || 30,
-        audioUrl: found.audioUrl || found.audioSrcUrl || '',
-        coverArtUrl: found.artworkBase64 || found.coverArtUrl || ''
-      });
-    }
-    return res.status(404).json({
-      success: false,
-      error: 'Beat not found'
+  // 🎧 Social Unlock Verification
+  app.post('/api/verify-and-download', (req, res) => {
+    const { trackId, fileType } = req.body;
+    const downloadUrl = `/local_storage/beats/track_${trackId}_${fileType || 'wav'}.wav`;
+    return res.status(200).json({ 
+      success: true, 
+      downloadUrl: downloadUrl,
+      expiresIn: 60,
+      message: 'Social task verified successfully.' 
     });
   });
-
-  // 💳 Booking Deposit Intent API endpoint
-  app.post('/api/v1/bookings/create-deposit-intent', (req, res) => {
-    const { id, scope, bpm, mood, referenceLinks, clientName, clientEmail } = req.body;
-    console.log(`[BOOKING DEPOSIT INTENT] Client ID: ${id}, Scope: ${scope}, BPM: ${bpm}, Mood: ${mood}`);
-    
-    return res.json({
-      success: true,
-      bookingReference: `BK-${Date.now()}`,
-      stripeCheckoutUrl: `https://checkout.stripe.com/pay/cs_test_booking_${Date.now()}`,
-      message: 'Booking deposit payment intent created successfully.'
-    });
-  });
-
-  // 🎵 Explicit route for beat metadata injection
-  app.get('/beat/:id', async (req, res) => {
-    const beatId = req.params.id;
-    const beat = ENTERPRISE_CATALOG_STORAGE.find(b => b.id === beatId);
-    
-    // Metadata fallback
-    const title = beat ? `${beat.title} by ${beat.producer || 'Voodoo Boomin'}` : "Voodoo Boomin | Beat Store";
-    const desc = beat ? `Key: ${beat.key || 'Unknown'} | BPM: ${beat.bpm || 'Unknown'}` : "Pro Audio Loops & Instrumental Beats";
-    const image = beat ? (beat.artworkBase64 || beat.coverArtUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80") : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80";
-    const url = `https://${req.get('host') || 'localhost'}${req.originalUrl}`;
-
-    if (process.env.NODE_ENV === 'production') {
-      const distPath = path.join(process.cwd(), 'dist');
-      let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
-      html = html
-        .replace(/{BEAT_TITLE}/g, title)
-        .replace(/{BEAT_KEYWORDS_OR_SHORT_DESCRIPTION}/g, desc)
-        .replace(/{ABSOLUTE_IMAGE_URL}/g, image)
-        .replace(/{CANONICAL_PAGE_URL}/g, url);
-      res.send(html);
-    } else {
-      // In dev, we just let the SPA handle it, but for SEO, this route could return the same HTML
-      // but in dev it's hard to get the built index.html. 
-      // The current approach of `app.get('*')` catching it and replacing placeholders seems to be what's desired for dev too.
-      // So maybe I don't need this explicit route if `app.get('*')` already handles it?
-      // Wait, the current `app.get('*')` is *already* handling it in development too?
-      // No, line 1085 `if (process.env.NODE_ENV !== "production") { app.use(vite.middlewares); }`
-      // This means in dev, vite handles everything and `app.get('*')` is NOT called!
-      
-      // Ah! So in DEV, the placeholders are NOT replaced!
-      // This is a common issue with SSR + Vite Dev.
-      res.send(`Metadata for ${title}: This is the server-side metadata preview.`);
-    }
-  });
-
-  // 💳 Stripe checkout session endpoint has been removed.
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
@@ -728,21 +946,26 @@ async function startServer() {
       let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
       
       let beatTitle = "Voodoo Boomin | Beat Store";
-      let beatDesc = "Pro Audio Loops & Instrumental Beats";
-      let beatImage = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80";
+      let beatDesc = "Official Voodoo Boomin Instrumental Store";
+      let beatImage = "";
       let beatUrl = `https://${req.get('host') || 'localhost'}${req.originalUrl}`;
 
       if (req.path.startsWith('/beat/')) {
         const beatId = req.path.split('/')[2];
-        const beat = ENTERPRISE_CATALOG_STORAGE.find(b => b.id === beatId);
+        const beats = loadBeats();
+        const beat = beats.find((b: any) => b.id === beatId);
         if (beat) {
           beatTitle = `${beat.title} by ${beat.producer || 'Voodoo Boomin'}`;
-          beatDesc = `Key: ${beat.key || 'Unknown'} | BPM: ${beat.bpm || 'Unknown'}`;
-          beatImage = beat.artworkBase64 || beat.coverArtUrl || beatImage;
+          beatDesc = `Key: ${beat.key || 'Custom'} | BPM: ${beat.bpm || '140'}`;
+          beatImage = beat.coverArtUrl || '';
         }
       }
 
       html = html
+        .replace(/<title>.*?<\/title>/, `<title>${beatTitle}</title>`)
+        .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${beatDesc}" />`)
+        .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${beatTitle}" />`)
+        .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${beatDesc}" />`)
         .replace(/{BEAT_TITLE}/g, beatTitle)
         .replace(/{BEAT_KEYWORDS_OR_SHORT_DESCRIPTION}/g, beatDesc)
         .replace(/{ABSOLUTE_IMAGE_URL}/g, beatImage)

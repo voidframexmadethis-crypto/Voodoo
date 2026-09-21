@@ -319,8 +319,193 @@ export interface Analytics {
   totalPlays: number;
   totalShares: number;
   downloads: number;
+  freeDownloads?: number;
   totalEarnings?: number;
   platformFees?: number;
+}
+
+export type FeedCategory = 'ALL UPDATES' | 'NEW BEATS' | 'BEAT PACKS' | 'ANNOUNCEMENTS' | 'MEDIA';
+export type FeedPostType = 'TEXT' | 'IMAGE' | 'YOUTUBE VIDEO' | 'BEAT' | 'BEAT PACK' | 'ANNOUNCEMENT';
+
+export interface FeedPost {
+  id: string;
+  title?: string;
+  content: string;
+  category: FeedCategory;
+  postType: FeedPostType;
+  imageUrl?: string;
+  youtubeUrl?: string;
+  featuredBeatId?: string;
+  featuredPackId?: string;
+  isPinned: boolean;
+  isPublished: boolean;
+  publishedAt: string; // ISO String
+  createdAt: string;
+  updatedAt: string;
+  likes?: number;
+  shares?: number;
+}
+
+export type HomepageSectionId = 
+  | 'hero' 
+  | 'beats' 
+  | 'beat_packs' 
+  | 'high_performance' 
+  | 'top_tracks' 
+  | 'feed' 
+  | 'services' 
+  | 'profile';
+
+export interface HomepageSectionConfig {
+  id: HomepageSectionId;
+  name: string;
+  enabled: boolean;
+}
+
+export type HomepageLayout = HomepageSectionConfig[];
+
+export interface DistributorPartner {
+  id: string;
+  name: string;
+  description: string;
+  logo: string;
+  features: string[];
+  pricing?: string;
+  officialWebsiteUrl: string;
+  referralUrl?: string;
+  buttonText?: string;
+  active: boolean;
+  sortOrder: number;
+  
+  // Admin-only partner & commission tracking
+  partnershipType?: string; // e.g. 'Affiliate', 'Referral', 'Direct Partnership', 'Listing Only'
+  commissionDescription?: string;
+  trackingMethod?: string; // e.g. 'Impact', 'CJ', 'Direct Link', 'Custom Promo Code'
+  applicationStatus?: 'Not Applied' | 'Pending approval' | 'Approved' | 'Rejected';
+  notes?: string;
+  clickCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DistributorClickLog {
+  id: string;
+  distributorId: string;
+  distributorName: string;
+  timestamp: string;
+  sourcePage?: string;
+}
+
+export type ProfessionalCategory = 
+  | 'anr_record_labels'
+  | 'mixing_mastering'
+  | 'recording_engineers'
+  | 'music_managers'
+  | 'playlist_curators'
+  | 'cover_art_designers'
+  | 'music_promotion'
+  | 'production_services'
+  | 'music_distribution';
+
+export type ProfessionalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+
+export interface ServiceOffer {
+  id: string;
+  title: string;
+  description?: string;
+  price?: string;
+  turnaround?: string;
+}
+
+export interface PortfolioItem {
+  id: string;
+  title: string;
+  url: string;
+  type?: 'audio' | 'video' | 'design' | 'link';
+  description?: string;
+  thumbnailUrl?: string;
+}
+
+export interface ProfessionalSocialLink {
+  platform: 'instagram' | 'twitter' | 'youtube' | 'spotify' | 'tiktok' | 'soundcloud' | 'linkedin' | 'website' | 'other';
+  url: string;
+}
+
+export interface MusicProfessional {
+  id: string;
+  name: string;
+  category: ProfessionalCategory;
+  secondaryCategories?: ProfessionalCategory[];
+  tagline?: string;
+  bio: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  location?: string; // e.g. "Atlanta, GA", "Worldwide / Remote"
+  websiteUrl?: string;
+  email: string;
+  phone?: string;
+  bookingUrl?: string;
+  bookingMethod?: 'website' | 'email' | 'booking_link' | 'custom';
+  socialLinks?: ProfessionalSocialLink[];
+  services?: ServiceOffer[];
+  portfolio?: PortfolioItem[];
+  pricingInfo?: string;
+  
+  // Status & Administration
+  status: ProfessionalStatus;
+  published: boolean;
+  featured: boolean;
+  verified: boolean; // Admin-verified only (no fake badges)
+  adminNotes?: string;
+  
+  createdAt: string;
+  updatedAt: string;
+  profileViews?: number;
+  contactClicks?: number;
+}
+
+export interface ServicesConfig {
+  enableMusicDistribution: boolean;
+  enableProfessionalApplications: boolean;
+}
+
+export type ServiceCategoryId = 
+  | 'anr_record_labels'
+  | 'mixing_mastering'
+  | 'recording_engineers'
+  | 'music_managers'
+  | 'playlist_curators'
+  | 'cover_art_designers'
+  | 'music_promotion'
+  | 'production_services'
+  | 'music_distribution';
+
+export interface ServiceCategory {
+  id: ServiceCategoryId;
+  title: string;
+  description: string;
+  iconName: string;
+  enabled: boolean;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  actionText?: string;
+  actionType?: 'BEATS' | 'BEAT_PACK' | 'VAULT' | 'SERVICES' | 'CUSTOM';
+  targetId?: string;
+  actionUrl?: string;
+  active: boolean;
+  createdAt?: string;
+}
+
+export interface VaultConfig {
+  beatIds: string[];
+  packIds: string[];
+  featuredItemId?: string;
+  customTitle?: string;
+  customDescription?: string;
 }
 
 export interface StoreState {
@@ -337,4 +522,13 @@ export interface StoreState {
   syncCueRecords: SyncCueRecord[];
   auditLog: AuditLogEntry[];
   analytics: Analytics;
+  feedPosts: FeedPost[];
+  homepageLayout?: HomepageLayout;
+  distributorPartners?: DistributorPartner[];
+  distributorClicks?: DistributorClickLog[];
+  professionals?: MusicProfessional[];
+  servicesConfig?: ServicesConfig;
+  featuredBeatId?: string | null;
+  announcement?: Announcement | null;
+  vaultConfig?: VaultConfig;
 }

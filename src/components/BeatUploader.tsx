@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useAuth } from '../context/AuthContext';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { storage } from '../lib/firebase';
 import { 
   Upload, Image as ImageIcon, Music, CheckCircle2, ChevronRight, ChevronLeft, 
   Sparkles, AlertCircle, Trash2, Loader2, Play, Pause, Layers, Globe, 
@@ -280,93 +278,87 @@ export default function BeatUploader() {
         setFormData(prev => ({ ...prev, coverArtUrl: prev.coverArtUrl || instantObjectUrl }));
       }
 
-      if (isDevMode) {
-        if (type === 'audio') {
+      if (type === 'audio') {
+        try {
+          const sessionResponse = await fetch('/api/uploads/initialize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+          });
+          const { uploadId } = await sessionResponse.json();
+
+          const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+          for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const chunk = file.slice(start, end);
+
+            const presignedUrlResp = await fetch(`/api/uploads/presign-chunk?uploadId=${uploadId}&partNumber=${i+1}`);
+            const { url } = await presignedUrlResp.json();
+
+            await fetch(url, { method: 'PUT', body: chunk });
+            setUploadProgress(prev => ({
+              ...prev,
+              [file.name]: Math.round(((i + 1) / totalChunks) * 100)
+            }));
+          }
+
+          const finalizeRes = await fetch('/api/uploads/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uploadId, fileName: file.name })
+          });
+          const finalData = await finalizeRes.json();
+          
+          if (finalData.success) {
+            setFormData(prev => {
+              if (role === 'tagged') return { ...prev, audioUrl: finalData.url };
+              if (role === 'untagged') return { ...prev, untaggedWavUrl: finalData.url };
+              if (role === 'stems') return { ...prev, stemsZipUrl: finalData.url };
+              if (role === 'tag') return { ...prev, voiceTagUrl: finalData.url };
+              return prev;
+            });
+          }
+        } catch (err) {
+          console.error("Chunked upload session error, falling back to direct upload:", err);
+          const formDataPayload = new FormData();
+          formDataPayload.append('file', file);
           try {
-            const sessionResponse = await fetch('/api/uploads/initialize', {
+            const res = await fetch(`/api/upload-local?type=audio`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+              body: formDataPayload,
             });
-            const { uploadId } = await sessionResponse.json();
-
-            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-            for (let i = 0; i < totalChunks; i++) {
-              const start = i * CHUNK_SIZE;
-              const end = Math.min(start + CHUNK_SIZE, file.size);
-              const chunk = file.slice(start, end);
-
-              const presignedUrlResp = await fetch(`/api/uploads/presign-chunk?uploadId=${uploadId}&partNumber=${i+1}`);
-              const { url } = await presignedUrlResp.json();
-
-              await fetch(url, { method: 'PUT', body: chunk });
-              setUploadProgress(prev => ({
-                ...prev,
-                [file.name]: Math.round(((i + 1) / totalChunks) * 100)
-              }));
-            }
-
-            const finalizeRes = await fetch('/api/uploads/finalize', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ uploadId, fileName: file.name })
-            });
-            const finalData = await finalizeRes.json();
-            
-            if (finalData.success) {
+            const result = await res.json();
+            if (result.success) {
               setFormData(prev => {
-                if (role === 'tagged') return { ...prev, audioUrl: finalData.url };
-                if (role === 'untagged') return { ...prev, untaggedWavUrl: finalData.url };
-                if (role === 'stems') return { ...prev, stemsZipUrl: finalData.url };
-                if (role === 'tag') return { ...prev, voiceTagUrl: finalData.url };
+                if (role === 'tagged') return { ...prev, audioUrl: result.url };
+                if (role === 'untagged') return { ...prev, untaggedWavUrl: result.url };
+                if (role === 'stems') return { ...prev, stemsZipUrl: result.url };
+                if (role === 'tag') return { ...prev, voiceTagUrl: result.url };
                 return prev;
               });
             }
-          } catch (err) {
-            console.error("Chunked upload session error:", err);
-          } finally {
-            setIsUploading(false);
+          } catch (uploadErr) {
+            console.error("Direct audio upload error:", uploadErr);
           }
-        } else {
-          const formDataPayload = new FormData();
-          formDataPayload.append('file', file);
-          fetch(`/api/upload-local?type=${type}`, {
-            method: 'POST',
-            body: formDataPayload,
-          })
-            .then(res => res.json())
-            .then(result => {
-              if (result.success) {
-                setFormData(prev => ({ ...prev, coverArtUrl: result.url }));
-              }
-            })
-            .catch(err => console.error("Cover Art upload error:", err))
-            .finally(() => setIsUploading(false));
+        } finally {
+          setIsUploading(false);
         }
-      } else if (user) {
-        const storagePath = type === 'audio' ? `beats/${user.uid}/${fileId}_${file.name}` : `artworks/${user.uid}/${fileId}_${file.name}`;
-        const storageRef = ref(storage, storagePath);
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        uploadTask.on('state_changed', 
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(prev => ({ ...prev, [file.name]: Math.round(progress) }));
-          }, 
-          (error) => { console.error('Firebase upload failed:', error); setIsUploading(false); }, 
-          async () => {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            setFormData(prev => {
-              if (type === 'image') return { ...prev, coverArtUrl: downloadURL };
-              if (role === 'tagged') return { ...prev, audioUrl: downloadURL };
-              if (role === 'untagged') return { ...prev, untaggedWavUrl: downloadURL };
-              if (role === 'stems') return { ...prev, stemsZipUrl: downloadURL };
-              if (role === 'tag') return { ...prev, voiceTagUrl: downloadURL };
-              return prev;
-            });
-            setIsUploading(false);
-          }
-        );
+      } else {
+        const formDataPayload = new FormData();
+        formDataPayload.append('file', file);
+        fetch(`/api/upload-local?type=${type}`, {
+          method: 'POST',
+          body: formDataPayload,
+        })
+          .then(res => res.json())
+          .then(result => {
+            if (result.success) {
+              setFormData(prev => ({ ...prev, coverArtUrl: result.url }));
+            }
+          })
+          .catch(err => console.error("Cover Art upload error:", err))
+          .finally(() => setIsUploading(false));
       }
     }
   };

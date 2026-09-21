@@ -27,13 +27,18 @@ import {
   ShoppingCart,
   Sliders,
   ChevronDown,
+  TrendingUp,
+  Search,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import AudioPlayer from "./AudioPlayer";
 import Uploader from "../pages/Uploader";
 import { MiniCart } from "./MiniCart";
-import { CheckoutModal } from "./CheckoutModal";
+import { CheckoutModal, PurchaseOrderPayload } from "./CheckoutModal";
+import { PurchaseConfirmationModal } from "./PurchaseConfirmationModal";
+import AnnouncementBanner from "./AnnouncementBanner";
+import StorewideSearchModal from "./StorewideSearchModal";
 
 // Restored exact audio file paths, stream variables, and music assets for working preview files
 export const LAYOUT_STREAM_VARIABLES = {
@@ -49,7 +54,9 @@ export default function Layout() {
   const [isUploaderOverlayOpen, setIsUploaderOverlayOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartCheckoutActive, setCartCheckoutActive] = useState(false);
+  const [cartOrderConfirmation, setCartOrderConfirmation] = useState<PurchaseOrderPayload | null>(null);
   const [producerMenuOpen, setProducerMenuOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -317,8 +324,11 @@ export default function Layout() {
   const navItems = [
     { to: "/storefront", icon: Disc, label: "Beats" },
     { to: "/storefront?filter=packs", icon: Music, label: "Beat Packs" },
+    { to: "/storefront#top-tracks", icon: TrendingUp, label: "Top Tracks" },
+    { to: "/top-charts", icon: TrendingUp, label: "Top Charts" },
+    { to: "/storefront#feed", icon: Radio, label: "Feed" },
     { to: "/profile", icon: UserIcon, label: "Artist Profile" },
-    { to: "/enterprise", icon: Radio, label: "Services" },
+    { to: "/services", icon: Radio, label: "Services" },
     { to: "/videos", icon: Youtube, label: "YouTube Videos" },
     { to: "/player", icon: Music, label: "Audio Player" },
   ];
@@ -360,8 +370,10 @@ export default function Layout() {
               className={() => {
                 const isActive = item.to.includes("filter=packs")
                   ? location.pathname === "/storefront" && location.search.includes("filter=packs")
+                  : item.to.includes("#top-tracks")
+                  ? location.pathname === "/storefront" && location.hash === "#top-tracks"
                   : item.to === "/storefront"
-                  ? location.pathname === "/storefront" && !location.search.includes("filter=packs")
+                  ? location.pathname === "/storefront" && !location.search.includes("filter=packs") && location.hash !== "#top-tracks"
                   : location.pathname === item.to;
                 return `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                   isActive
@@ -369,7 +381,21 @@ export default function Layout() {
                     : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
                 }`;
               }}
-              onClick={() => setSidebarOpen(false)}
+              onClick={() => {
+                setSidebarOpen(false);
+                if (item.to.includes("#top-tracks") && location.pathname === "/storefront") {
+                  const el = document.getElementById("top-tracks");
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }
+                if (item.to.includes("#feed") && location.pathname === "/storefront") {
+                  const el = document.getElementById("feed");
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }
+              }}
             >
               <item.icon className="w-5 h-5" />
               <span>{item.label}</span>
@@ -575,6 +601,9 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Feature 28: Announcement Banner */}
+        <AnnouncementBanner />
+
         {/* Unified Topbar with Live Notifications & VIP status */}
         <header className="flex items-center justify-between h-16 px-4 md:px-8 border-b border-neutral-800 bg-neutral-900/65 backdrop-blur-md sticky top-0 z-40 flex-shrink-0 w-full select-none">
           {/* LEFT: Branding & Logo */}
@@ -597,15 +626,36 @@ export default function Layout() {
           </div>
 
           {/* CENTER: Primary Storefront Navigation */}
-          <nav className="hidden lg:flex items-center justify-center space-x-8 xl:space-x-12 px-6 flex-1">
+          <nav 
+            className="hidden lg:flex items-center justify-start lg:justify-center space-x-6 xl:space-x-8 px-6 flex-1 overflow-x-auto scrollbar-none flex-nowrap min-w-0 max-w-full py-1"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
             <NavLink
-              to="/storefront"
+              to="/"
               end
               className={() => {
-                const isActive = location.pathname === "/storefront" && !location.search.includes("filter=packs") && !location.search.includes("contact=true");
-                return `text-xs font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
-                  isActive ? "text-indigo-400 border-indigo-400" : "text-neutral-400 border-transparent"
+                const isActive = location.pathname === "/" && !location.search.includes("filter=packs") && location.hash !== "#top-tracks" && !location.search.includes("contact=true");
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
                 }`;
+              }}
+            >
+              Home
+            </NavLink>
+            <NavLink
+              to="/storefront"
+              className={() => {
+                const isActive = location.pathname === "/storefront" && !location.search.includes("filter=packs") && location.hash !== "#top-tracks";
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
+                }`;
+              }}
+              onClick={(e) => {
+                if (location.pathname === "/" || location.pathname === "/storefront") {
+                  e.preventDefault();
+                  const el = document.getElementById("catalog-search-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
               }}
             >
               Beats
@@ -613,51 +663,100 @@ export default function Layout() {
             <NavLink
               to="/storefront?filter=packs"
               className={() => {
-                const isActive = location.pathname === "/storefront" && location.search.includes("filter=packs") && !location.search.includes("contact=true");
-                return `text-xs font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
-                  isActive ? "text-indigo-400 border-indigo-400" : "text-neutral-400 border-transparent"
+                const isActive = location.search.includes("filter=packs");
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
                 }`;
               }}
             >
               Beat Packs
             </NavLink>
             <NavLink
-              to="/enterprise"
+              to="/storefront#top-tracks"
+              onClick={() => {
+                const el = document.getElementById("top-tracks");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }}
               className={() => {
-                const isActive = location.pathname === "/enterprise";
-                return `text-xs font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
-                  isActive ? "text-indigo-400 border-indigo-400" : "text-neutral-400 border-transparent"
+                const isActive = location.hash === "#top-tracks";
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
+                }`;
+              }}
+            >
+              Top Tracks
+            </NavLink>
+            <NavLink
+              to="/top-charts"
+              className={() => {
+                const isActive = location.pathname === "/top-charts";
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
+                }`;
+              }}
+            >
+              Top Charts
+            </NavLink>
+            <NavLink
+              to="/services"
+              className={() => {
+                const isActive = location.pathname === "/services";
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
                 }`;
               }}
             >
               Services
             </NavLink>
+            <button
+              onClick={() => setCartOpen(true)}
+              className="text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 border-transparent text-neutral-400 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Cart</span>
+              {cart && cart.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded-full text-[9px] font-extrabold leading-none">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+            <NavLink
+              to="/profile"
+              className={() => {
+                const isActive = location.pathname === "/profile" || location.pathname === "/artist-profile";
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
+                }`;
+              }}
+            >
+              Profile
+            </NavLink>
             <NavLink
               to="/player"
               className={() => {
                 const isActive = location.pathname === "/player";
-                return `text-xs font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
-                  isActive ? "text-indigo-400 border-indigo-400" : "text-neutral-400 border-transparent"
+                return `text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
+                  isActive ? "text-purple-400 border-purple-400" : "text-neutral-400 border-transparent"
                 }`;
               }}
             >
               Audio Player
             </NavLink>
-            <NavLink
-              to="/storefront?contact=true"
-              className={() => {
-                const isActive = location.pathname === "/storefront" && location.search.includes("contact=true");
-                return `text-xs font-black tracking-widest uppercase transition-colors hover:text-white whitespace-nowrap pb-1 border-b-2 ${
-                  isActive ? "text-indigo-400 border-indigo-400" : "text-neutral-400 border-transparent"
-                }`;
-              }}
-            >
-              Contact
-            </NavLink>
           </nav>
 
           {/* RIGHT: Utility / Account Actions */}
           <div className="flex items-center space-x-2 md:space-x-3 xl:space-x-4 flex-shrink-0">
+            {/* Feature 29: Storewide Search Trigger Button */}
+            <button
+              onClick={() => setIsSearchModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Storewide Search (Beats, Packs, Services, Feed)"
+            >
+              <Search className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Search Store</span>
+            </button>
+
             {/* Systems Core Online Status (Desktop only) */}
             <div className="hidden xl:flex items-center space-x-2 bg-neutral-950/40 px-3 py-1.5 rounded-full border border-neutral-800/80">
               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -903,14 +1002,14 @@ export default function Layout() {
 
         {/* Page content */}
         <div className="flex-1 overflow-auto p-4 md:p-8 flex flex-col justify-between">
-          <div className="w-full max-w-[1600px] mx-auto flex-1">
+          <div className="w-full flex-1">
             <Outlet />
           </div>
 
           {/* 📧 CENTRAL EMAIL MARKETING & RAPPER VIP NEWSLETTER PANEL */}
           <footer
             id="vip-newsletter-footer"
-            className="mt-16 border-t border-neutral-900 pt-12 pb-6 w-full max-w-[1600px] mx-auto"
+            className="mt-16 border-t border-neutral-900 pt-12 pb-6 w-full"
           >
             <div className="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-2xl">
               {/* Background Glow */}
@@ -1190,7 +1289,7 @@ export default function Layout() {
             </div>
 
             {/* Footer rights display & Social Media Connectivity Panel */}
-            <div className="mt-8 border-t border-neutral-900 pt-6 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-neutral-500 max-w-7xl mx-auto px-4 pb-8">
+            <div className="mt-8 border-t border-neutral-900 pt-6 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-neutral-500 w-full px-4 pb-8">
               <div className="flex flex-col gap-2 text-center md:text-left">
                 <p style={{ cursor: "default" }} className="select-none">
                   © {new Date().getFullYear()} VOODOO BOOMIN. All Rights Reserved.
@@ -1322,11 +1421,30 @@ export default function Layout() {
           cartItems={cart}
           overrideTotal={cart.reduce((acc, item) => acc + item.price, 0) * (promoCode === 'VOODOO20' ? 0.8 : (promoCode === 'BOOMIN' ? 0.5 : 1))}
           onClose={() => setCartCheckoutActive(false)}
+          onOrderSuccess={(payload) => {
+            clearCart();
+            setCartCheckoutActive(false);
+            setCartOrderConfirmation(payload);
+          }}
           onSuccess={() => {
             clearCart();
+            setCartCheckoutActive(false);
           }}
         />
       )}
+
+      {cartOrderConfirmation && (
+        <PurchaseConfirmationModal 
+          order={cartOrderConfirmation} 
+          onClose={() => setCartOrderConfirmation(null)} 
+        />
+      )}
+
+      {/* Feature 29: Storewide Search Modal */}
+      <StorewideSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+      />
     </div>
   );
 }

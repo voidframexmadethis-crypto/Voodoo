@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { 
   Beat, 
   Profile, 
@@ -13,24 +13,30 @@ import {
   RightsRecord, 
   LivePerformanceRecord, 
   SyncCueRecord, 
-  AuditLogEntry 
+  AuditLogEntry,
+  FeedPost,
+  HomepageLayout,
+  HomepageSectionConfig,
+  DistributorPartner,
+  DistributorClickLog,
+  MusicProfessional,
+  ServicesConfig,
+  Announcement,
+  VaultConfig
 } from '../types';
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  where, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  orderBy,
-  serverTimestamp 
-} from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
 import { useAuth } from './AuthContext';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
-import { filterHumanBeats, isAIPlaceholderBeat } from '../lib/beatUtils';
+import { filterHumanBeats } from '../lib/beatUtils';
+
+export const DEFAULT_HOMEPAGE_LAYOUT: HomepageLayout = [
+  { id: 'hero', name: 'Hero / Featured Release', enabled: true },
+  { id: 'beats', name: 'Beats Catalog & Filter', enabled: true },
+  { id: 'beat_packs', name: 'Beat Packs Collection', enabled: true },
+  { id: 'high_performance', name: 'High-Performance Tracks', enabled: true },
+  { id: 'top_tracks', name: 'Top Tracks Ranking', enabled: true },
+  { id: 'feed', name: 'Voodoo Boomin Feed', enabled: true },
+  { id: 'services', name: 'Music Professionals Directory', enabled: true },
+  { id: 'profile', name: 'Producer Profile & Socials', enabled: true },
+];
 
 interface StoreContextType {
   state: StoreState;
@@ -44,7 +50,32 @@ interface StoreContextType {
   incrementAnalytics: (metric: keyof Analytics, amount?: number) => void;
   resetAnalytics: (metric: keyof Analytics) => void;
   
-  // Round 3 Dashboard Actions
+  // Feed Actions
+  addFeedPost: (post: FeedPost) => void;
+  updateFeedPost: (id: string, updates: Partial<FeedPost>) => void;
+  deleteFeedPost: (id: string) => void;
+  togglePinFeedPost: (id: string) => void;
+  likeFeedPost: (id: string) => void;
+
+  // Homepage Layout Actions
+  updateHomepageLayout: (layout: HomepageLayout) => Promise<void>;
+  resetHomepageLayout: () => Promise<void>;
+
+  // Music Distribution & Services Actions
+  addDistributorPartner: (distributor: DistributorPartner) => Promise<void>;
+  updateDistributorPartner: (id: string, updates: Partial<DistributorPartner>) => Promise<void>;
+  deleteDistributorPartner: (id: string) => Promise<void>;
+  reorderDistributorPartners: (distributors: DistributorPartner[]) => Promise<void>;
+  trackDistributorClick: (distributorId: string, distributorName: string, sourcePage?: string) => Promise<void>;
+
+  // Professional Services Directory Actions
+  addProfessional: (professional: MusicProfessional) => Promise<void>;
+  updateProfessional: (id: string, updates: Partial<MusicProfessional>) => Promise<void>;
+  deleteProfessional: (id: string) => Promise<void>;
+  updateServicesConfig: (config: ServicesConfig) => Promise<void>;
+  trackProfessionalClick: (id: string, action: 'view' | 'contact') => Promise<void>;
+
+  // Dashboard Actions
   addBeatPack: (pack: BeatPack) => void;
   updateBeatPack: (id: string, updates: Partial<BeatPack>) => void;
   deleteBeatPack: (id: string) => void;
@@ -61,7 +92,7 @@ interface StoreContextType {
   addSyncCue: (rec: SyncCueRecord) => void;
   logAudit: (eventType: string, description: string, beatId?: string, packId?: string, previousValue?: string, newValue?: string) => void;
   
-  // Upgraded E-commerce States
+  // Upgraded E-commerce States (PayPal Powered)
   cart: CartItem[];
   addToCart: (beat: Beat, licenseType?: string) => void;
   removeFromCart: (beatId: string) => void;
@@ -73,6 +104,17 @@ interface StoreContextType {
   setCurrency: (currency: 'USD' | 'EUR' | 'GBP' | 'JPY') => void;
   favorites: string[];
   toggleFavorite: (beatId: string) => void;
+  recentlyViewed: string[];
+  trackBeatView: (beatId: string) => void;
+
+  // Features 27, 28, 30 Actions
+  setFeaturedBeatId: (beatId: string | null) => void;
+  setAnnouncement: (announcement: Announcement | null) => void;
+  addBeatToVault: (beatId: string) => void;
+  removeBeatFromVault: (beatId: string) => void;
+  addPackToVault: (packId: string) => void;
+  removePackFromVault: (packId: string) => void;
+  setVaultFeaturedItem: (itemId?: string) => void;
 }
 
 const defaultState: StoreState = {
@@ -86,6 +128,7 @@ const defaultState: StoreState = {
     coverUrl: '',
     genres: [],
     verified: false,
+    paypalEmail: 'voodooboomin@gmail.com',
     socialLinks: [],
   },
   videos: [],
@@ -108,6 +151,12 @@ const defaultState: StoreState = {
     totalEarnings: 0,
     platformFees: 0,
   },
+  feedPosts: [],
+  professionals: [],
+  servicesConfig: {
+    enableMusicDistribution: false,
+    enableProfessionalApplications: true
+  }
 };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -127,11 +176,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const savedPerf = localStorage.getItem('voodooboomin_live_performances');
       const savedSync = localStorage.getItem('voodooboomin_sync_cue');
       const savedAudit = localStorage.getItem('voodooboomin_audit_log');
+      const savedFeed = localStorage.getItem('voodooboomin_feed_posts');
+      const savedDistributors = localStorage.getItem('voodooboomin_distributors');
+      const savedClicks = localStorage.getItem('voodooboomin_distributor_clicks');
+      const savedProfessionals = localStorage.getItem('voodooboomin_professionals');
+      const savedServicesConfig = localStorage.getItem('voodooboomin_services_config');
+      const savedFeaturedBeatId = localStorage.getItem('voodooboomin_featured_beat_id');
+      const savedAnnouncement = localStorage.getItem('voodooboomin_announcement');
+      const savedVaultConfig = localStorage.getItem('voodooboomin_vault_config');
 
-      // Legacy fallback keys
-      const legacyName = localStorage.getItem('VOODOO_BOOMIN_DISPLAY_NAME') || localStorage.getItem('KRYPSIDE_DISPLAY_NAME');
-      const legacyBio = localStorage.getItem('VOODOO_BOOMIN_BIO') || localStorage.getItem('KRYPSIDE_BIO');
-      const legacyImg = localStorage.getItem('VOODOO_BOOMIN_IMAGE_URL') || localStorage.getItem('KRYPSIDE_IMAGE_URL');
+      let parsedAnnouncement: Announcement | null = null;
+      if (savedAnnouncement) {
+        try { parsedAnnouncement = JSON.parse(savedAnnouncement); } catch {}
+      }
+
+      let parsedVaultConfig: VaultConfig = { beatIds: [], packIds: [] };
+      if (savedVaultConfig) {
+        try { parsedVaultConfig = JSON.parse(savedVaultConfig); } catch {}
+      }
 
       let parsedProfile = defaultState.profile;
       if (savedProfile) {
@@ -140,13 +202,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         } catch {
           parsedProfile = defaultState.profile;
         }
-      } else if (legacyName || legacyBio || legacyImg) {
-        parsedProfile = {
-          ...defaultState.profile,
-          ...(legacyName ? { name: legacyName } : {}),
-          ...(legacyBio ? { bio: legacyBio } : {}),
-          ...(legacyImg ? { avatarUrl: legacyImg } : {}),
-        };
       }
 
       const parsedBeats = savedBeats ? JSON.parse(savedBeats) : [];
@@ -156,7 +211,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const parsedPromos = savedPromos ? JSON.parse(savedPromos) : [];
       const validPromos = parsedPromos.filter((p: any) => p && p.id !== 'promo_holiday30' && p.id !== 'promo_bulk2v1');
       const parsedAudit = savedAudit ? JSON.parse(savedAudit) : [];
-      const validAudit = parsedAudit.filter((a: any) => a && a.id !== 'audit_init');
+      const parsedFeed = savedFeed ? JSON.parse(savedFeed) : [];
+      const parsedDistributors = savedDistributors ? JSON.parse(savedDistributors) : [];
+      const parsedClicks = savedClicks ? JSON.parse(savedClicks) : [];
+      const parsedProfessionals = savedProfessionals ? JSON.parse(savedProfessionals) : [];
+      let parsedServicesConfig = {
+        enableMusicDistribution: false,
+        enableProfessionalApplications: true
+      };
+      if (savedServicesConfig) {
+        try {
+          parsedServicesConfig = { ...parsedServicesConfig, ...JSON.parse(savedServicesConfig) };
+        } catch {}
+      }
+
+      const savedLayout = localStorage.getItem('voodooboomin_layout');
+      let parsedLayout: HomepageLayout = DEFAULT_HOMEPAGE_LAYOUT;
+      if (savedLayout) {
+        try {
+          const loaded = JSON.parse(savedLayout) as HomepageLayout;
+          const existingIds = loaded.map((x: any) => x.id);
+          const missing = DEFAULT_HOMEPAGE_LAYOUT.filter(x => !existingIds.includes(x.id));
+          parsedLayout = [...loaded, ...missing];
+        } catch {
+          parsedLayout = DEFAULT_HOMEPAGE_LAYOUT;
+        }
+      }
 
       return {
         profile: parsedProfile,
@@ -170,8 +250,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         rightsRecords: savedRights ? JSON.parse(savedRights) : [],
         livePerformances: savedPerf ? JSON.parse(savedPerf) : [],
         syncCueRecords: savedSync ? JSON.parse(savedSync) : [],
-        auditLog: validAudit,
+        auditLog: parsedAudit,
         analytics: defaultState.analytics,
+        feedPosts: Array.isArray(parsedFeed) ? parsedFeed : [],
+        homepageLayout: parsedLayout,
+        distributorPartners: Array.isArray(parsedDistributors) ? parsedDistributors : [],
+        distributorClicks: Array.isArray(parsedClicks) ? parsedClicks : [],
+        professionals: Array.isArray(parsedProfessionals) ? parsedProfessionals : [],
+        servicesConfig: parsedServicesConfig,
+        featuredBeatId: savedFeaturedBeatId || null,
+        announcement: parsedAnnouncement,
+        vaultConfig: parsedVaultConfig,
       };
     } catch (e) {
       return {
@@ -180,11 +269,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         beatPacks: [],
         promotions: [],
         auditLog: [],
+        feedPosts: [],
+        homepageLayout: DEFAULT_HOMEPAGE_LAYOUT,
+        distributorPartners: [],
+        distributorClicks: [],
+        professionals: [],
+        servicesConfig: {
+          enableMusicDistribution: false,
+          enableProfessionalApplications: true
+        }
       };
     }
   });
 
-  // Upgraded E-commerce States
+  // E-commerce Cart State
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('voodooboomin_cart');
@@ -203,8 +301,294 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  // Feature 20: Persistent Recently Viewed Beats State
+  const [recentlyViewed, setRecentlyViewed] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('voodooboomin_recently_viewed');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const trackBeatView = (beatId: string) => {
+    if (!beatId) return;
+    setRecentlyViewed(prev => {
+      const filtered = prev.filter(id => id !== beatId);
+      const updated = [beatId, ...filtered].slice(0, 15);
+      try {
+        localStorage.setItem('voodooboomin_recently_viewed', JSON.stringify(updated));
+      } catch (e) {
+        console.error("Recently viewed save error", e);
+      }
+      return updated;
+    });
+  };
+
   const [promoCode, setPromoCode] = useState<string>('');
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>('USD');
+
+  // Feature 19: Cart Revalidation and Price Synchronization with Server/Database Authoritative Catalog
+  useEffect(() => {
+    if (state.beats && state.beats.length > 0 && cart.length > 0) {
+      let cartChanged = false;
+      const updatedCart = cart.map(cartItem => {
+        // Find the authoritative beat record from the live catalog
+        const liveBeat = state.beats.find(b => b.id === cartItem.beat.id);
+        if (!liveBeat) {
+          // Beat no longer exists in authoritative catalog, remove from cart
+          cartChanged = true;
+          return null;
+        }
+
+        // Retrieve authoritative live price for the selected license
+        let livePrice = liveBeat.price || 35.00;
+        if (liveBeat.directPriceOnly) {
+          livePrice = liveBeat.price || 35.00;
+        } else if (liveBeat.licenses && (liveBeat.licenses as any)[cartItem.licenseType]) {
+          const lic = (liveBeat.licenses as any)[cartItem.licenseType];
+          if (lic.enabled && lic.price !== undefined) {
+            livePrice = Number(lic.price);
+          }
+        }
+
+        // If authoritative price or beat details changed, update cart item
+        if (livePrice !== cartItem.price || liveBeat.title !== cartItem.beat.title) {
+          cartChanged = true;
+          return { ...cartItem, beat: liveBeat, price: livePrice };
+        }
+
+        return cartItem;
+      }).filter((item): item is CartItem => item !== null);
+
+      if (cartChanged) {
+        setCart(updatedCart);
+        try {
+          localStorage.setItem('voodooboomin_cart', JSON.stringify(updatedCart));
+        } catch (e) {
+          console.error("Cart sync error", e);
+        }
+      }
+    }
+  }, [state.beats]);
+
+  // Sync beats and analytics from server backend on initial load
+  useEffect(() => {
+    fetch('/api/beats')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch beats');
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          const validBeats = filterHumanBeats(data);
+          setState(prev => {
+            const combined = [...validBeats, ...prev.beats];
+            const uniqueBeats = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            return {
+              ...prev,
+              beats: uniqueBeats
+            };
+          });
+        }
+      })
+      .catch(err => console.log('Loaded local beats cache.'));
+
+    fetch('/api/analytics')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch analytics');
+      })
+      .then(analyticsData => {
+        if (analyticsData && typeof analyticsData === 'object') {
+          setState(prev => ({
+            ...prev,
+            analytics: {
+              ...prev.analytics,
+              ...analyticsData
+            }
+          }));
+        }
+      })
+      .catch(() => {});
+
+    // Sync real feed posts from server backend
+    fetch('/api/feed')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch feed');
+      })
+      .then(feedData => {
+        if (Array.isArray(feedData)) {
+          setState(prev => {
+            const combined = [...feedData, ...prev.feedPosts];
+            const uniqueFeed = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            return {
+              ...prev,
+              feedPosts: uniqueFeed
+            };
+          });
+        }
+      })
+      .catch(() => {});
+
+    // Sync homepage layout configuration from server backend
+    fetch('/api/layout')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch layout');
+      })
+      .then(layoutData => {
+        if (Array.isArray(layoutData) && layoutData.length > 0) {
+          setState(prev => ({
+            ...prev,
+            homepageLayout: layoutData
+          }));
+          localStorage.setItem('voodooboomin_layout', JSON.stringify(layoutData));
+        }
+      })
+      .catch(() => {});
+
+    // Sync music distribution partners from server backend
+    fetch('/api/distributors')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch distributors');
+      })
+      .then(distData => {
+        if (Array.isArray(distData)) {
+          setState(prev => {
+            const combined = [...distData, ...(prev.distributorPartners || [])];
+            const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            unique.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            return {
+              ...prev,
+              distributorPartners: unique
+            };
+          });
+        }
+      })
+      .catch(() => {});
+
+    // Sync distributor click logs
+    fetch('/api/distributors/clicks')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch distributor clicks');
+      })
+      .then(clicksData => {
+        if (Array.isArray(clicksData)) {
+          setState(prev => ({
+            ...prev,
+            distributorClicks: clicksData
+          }));
+        }
+      })
+      .catch(() => {});
+
+    // Sync professionals from server backend
+    fetch('/api/professionals')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch professionals');
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setState(prev => {
+            const combined = [...data, ...(prev.professionals || [])];
+            const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            return {
+              ...prev,
+              professionals: unique
+            };
+          });
+        }
+      })
+      .catch(() => {});
+
+    // Sync services config from server backend
+    fetch('/api/services/config')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch services config');
+      })
+      .then(configData => {
+        if (configData && typeof configData === 'object') {
+          setState(prev => ({
+            ...prev,
+            servicesConfig: {
+              ...prev.servicesConfig,
+              ...configData
+            }
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Sync professionals to localStorage
+  useEffect(() => {
+    if (state.professionals) {
+      try {
+        localStorage.setItem('voodooboomin_professionals', JSON.stringify(state.professionals));
+      } catch (e) {
+        console.error("Professionals save error", e);
+      }
+    }
+  }, [state.professionals]);
+
+  // Sync services config to localStorage
+  useEffect(() => {
+    if (state.servicesConfig) {
+      try {
+        localStorage.setItem('voodooboomin_services_config', JSON.stringify(state.servicesConfig));
+      } catch (e) {
+        console.error("Services config save error", e);
+      }
+    }
+  }, [state.servicesConfig]);
+
+  // Sync distributor partners to localStorage
+  useEffect(() => {
+    if (state.distributorPartners) {
+      try {
+        localStorage.setItem('voodooboomin_distributors', JSON.stringify(state.distributorPartners));
+      } catch (e) {
+        console.error("Distributors save error", e);
+      }
+    }
+  }, [state.distributorPartners]);
+
+  // Sync distributor click tracking to localStorage
+  useEffect(() => {
+    if (state.distributorClicks) {
+      try {
+        localStorage.setItem('voodooboomin_distributor_clicks', JSON.stringify(state.distributorClicks));
+      } catch (e) {
+        console.error("Clicks save error", e);
+      }
+    }
+  }, [state.distributorClicks]);
+
+  // Sync feed posts to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('voodooboomin_feed_posts', JSON.stringify(state.feedPosts));
+    } catch (e) {
+      console.error("Feed save error", e);
+    }
+  }, [state.feedPosts]);
+
+  // Sync homepage layout to localStorage
+  useEffect(() => {
+    if (state.homepageLayout) {
+      try {
+        localStorage.setItem('voodooboomin_layout', JSON.stringify(state.homepageLayout));
+      } catch (e) {
+        console.error("Layout save error", e);
+      }
+    }
+  }, [state.homepageLayout]);
 
   // Local storage synchronization
   useEffect(() => {
@@ -289,6 +673,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         [metric]: (prev.analytics[metric] || 0) + amount
       }
     }));
+
+    fetch('/api/analytics/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metric, amount })
+    }).catch(() => {});
   };
 
   const resetAnalytics = (metric: keyof Analytics) => {
@@ -458,112 +848,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     logAudit('SYNC_CUE_ADDED', `Added sync/cue sheet record for ${rec.finalSongTitle} (${rec.showProject})`, rec.beatId);
   };
 
-  // Sync Beats from Firestore
-  useEffect(() => {
-    // Public beats listener
-    const publicQ = query(
-      collection(db, 'beats'),
-      where('visibility', '==', 'Public'),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribePublic = onSnapshot(publicQ, (snapshot) => {
-      const publicBeats: Beat[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const b = { id: doc.id, ...data } as Beat;
-        if (!isAIPlaceholderBeat(b)) {
-          publicBeats.push(b);
-        }
-      });
-      
-      setState(prev => {
-        const combined = [...publicBeats, ...prev.beats];
-        const uniqueBeats = Array.from(new Map(combined.map(item => [item.id, item])).values());
-        
-        // Deduplicate by title + producer to prevent duplicates
-        const seen = new Set<string>();
-        const filtered = uniqueBeats.filter(b => {
-          const key = `${(b.title || '').toLowerCase().trim()}_${(b.producer || '').toLowerCase().trim()}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        return {
-          ...prev,
-          beats: filtered.length > 0 ? filtered : filterHumanBeats(prev.beats)
-        };
-      });
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'beats');
-    });
-
-    // User-specific beats listener (for private/unlisted)
-    let unsubscribeUser = () => {};
-    if (user) {
-      const userQ = query(
-        collection(db, 'beats'),
-        where('userId', '==', user.uid),
-        where('visibility', 'in', ['Private', 'Unlisted'])
-      );
-
-      unsubscribeUser = onSnapshot(userQ, (snapshot) => {
-        const privateBeats: Beat[] = [];
-        snapshot.forEach((doc) => {
-          privateBeats.push({ id: doc.id, ...doc.data() } as Beat);
-        });
-
-        setState(prev => ({
-          ...prev,
-          archivedBeats: privateBeats
-        }));
-      }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'beats');
-      });
-    }
-
-    return () => {
-      unsubscribePublic();
-      unsubscribeUser();
-    };
-  }, [user]);
-
-  // Sync Profile from Firestore
-  useEffect(() => {
-    if (!user) return;
-
-    const profileRef = doc(db, 'profiles', user.uid);
-    const unsubscribe = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setState(prev => ({
-          ...prev,
-          profile: { ...prev.profile, ...docSnap.data() } as Profile
-        }));
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `profiles/${user.uid}`);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
   const updateProfile = async (profileUpdate: Partial<Profile>) => {
     setState(prev => ({
       ...prev,
       profile: { ...prev.profile, ...profileUpdate }
     }));
-    if (!user) return;
-    const profileRef = doc(db, 'profiles', user.uid);
-    try {
-      await setDoc(profileRef, { 
-        ...profileUpdate, 
-        userId: user.uid,
-        updatedAt: serverTimestamp() 
-      }, { merge: true });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
-    }
+    fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...state.profile, ...profileUpdate })
+    }).catch(err => console.error("Profile save error:", err));
   };
 
   const addVideo = (video: YouTubeVideo) => {
@@ -580,28 +874,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const sanitizeForFirestore = (obj: any): any => {
-    if (obj === null || obj === undefined) return null;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
-    
-    const clean: Record<string, any> = {};
-    for (const [key, val] of Object.entries(obj)) {
-      if (val !== undefined) {
-        clean[key] = sanitizeForFirestore(val);
-      }
-    }
-    return clean;
-  };
-
   const addBeat = async (beat: Beat) => {
-    const beatId = beat.id || `human_beat_${Date.now()}`;
+    const beatId = beat.id || `beat_${Date.now()}`;
     const formattedBeat: Beat = {
       ...beat,
       id: beatId,
       isHumanUploaded: true,
       isLocal: true,
-      userId: user?.uid || 'local_user',
+      userId: user?.uid || 'producer',
       createdAt: (beat.createdAt || new Date().toISOString()) as any,
       updatedAt: new Date().toISOString() as any,
     };
@@ -612,44 +892,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       beats: [formattedBeat, ...prev.beats.filter(b => b.id !== formattedBeat.id)]
     }));
 
-    // 2. Persist to Firestore if user is authenticated
-    if (user) {
-      try {
-        const beatRef = doc(db, 'beats', formattedBeat.id);
-        const firestoreBeat = sanitizeForFirestore({
-          ...formattedBeat,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        await setDoc(beatRef, firestoreBeat);
-
-        // 3. Save Licenses to subcollection
-        if (formattedBeat.licenses) {
-          const licenseTypes = ['mp3Lease', 'wavLease', 'premiumLease', 'unlimitedLease', 'exclusive'];
-          for (const type of licenseTypes) {
-            const licenseData = (formattedBeat.licenses as any)[type];
-            if (licenseData && licenseData.enabled) {
-              const licenseRef = doc(db, 'beats', formattedBeat.id, 'licenses', type);
-              await setDoc(licenseRef, {
-                licenseType: type,
-                price: Number(licenseData.price),
-                isActive: true
-              });
-            }
-          }
-        }
-
-        // 4. Save Social Unlocks to subcollection
-        if (formattedBeat.socialUnlocks && formattedBeat.socialUnlocks.length > 0) {
-          for (const unlock of formattedBeat.socialUnlocks) {
-            const unlockRef = doc(db, 'beats', formattedBeat.id, 'social_unlocks', unlock.id);
-            await setDoc(unlockRef, sanitizeForFirestore(unlock));
-          }
-        }
-      } catch (error) {
-        console.warn("Firestore save fallback to local state:", error);
-      }
-    }
+    // 2. Persist to server backend
+    fetch('/api/beats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formattedBeat)
+    }).catch(err => console.error("Server save error:", err));
   };
 
   const removeBeat = async (id: string) => {
@@ -659,57 +907,501 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       beats: prev.beats.filter(b => b.id !== id),
       archivedBeats: prev.archivedBeats.filter(b => b.id !== id)
     }));
-    logAudit('BEAT_DELETED', `Permanent deletion of beat: ${targetBeat?.title || id} (ID: ${id}). Storefront listing and associated active files removed. Audit history retained.`, id);
+    logAudit('BEAT_DELETED', `Permanent deletion of beat: ${targetBeat?.title || id} (ID: ${id}).`, id);
 
-    if (user && !id.startsWith('local_') && !id.startsWith('default_')) {
-      const beatRef = doc(db, 'beats', id);
-      try {
-        await deleteDoc(beatRef);
-      } catch (error) {
-        try {
-          await updateDoc(beatRef, { 
-            visibility: 'Private',
-            updatedAt: serverTimestamp()
-          });
-        } catch (e) {
-          handleFirestoreError(error, OperationType.UPDATE, `beats/${id}`);
-        }
-      }
-    }
+    fetch(`/api/beats/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Delete beat error:", err));
   };
 
   const restoreBeat = async (id: string) => {
-    if (!user || id.startsWith('local_')) return;
-    const beatRef = doc(db, 'beats', id);
-    try {
-      await updateDoc(beatRef, { 
-        visibility: 'Public',
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `beats/${id}`);
-    }
+    setState(prev => ({
+      ...prev,
+      beats: prev.archivedBeats.filter(b => b.id === id).concat(prev.beats),
+      archivedBeats: prev.archivedBeats.filter(b => b.id !== id)
+    }));
   };
 
   const updateBeat = async (id: string, updates: Partial<Beat>) => {
-    if (!user || id.startsWith('local_')) {
-      setState(prev => ({
+    setState(prev => ({
+      ...prev,
+      beats: prev.beats.map(b => b.id === id ? { ...b, ...updates } : b),
+      archivedBeats: prev.archivedBeats.map(b => b.id === id ? { ...b, ...updates } : b)
+    }));
+
+    fetch(`/api/beats/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    }).catch(err => console.error("Update beat error:", err));
+  };
+
+  // 📰 Real Feed Post Actions
+  const addFeedPost = (post: FeedPost) => {
+    setState(prev => {
+      let updatedPosts = prev.feedPosts.filter(p => p.id !== post.id);
+      if (post.isPinned) {
+        updatedPosts = updatedPosts.map(p => ({ ...p, isPinned: false }));
+      }
+      return {
         ...prev,
-        beats: prev.beats.map(b => b.id === id ? { ...b, ...updates } : b),
-        archivedBeats: prev.archivedBeats.map(b => b.id === id ? { ...b, ...updates } : b)
-      }));
-      return;
-    }
-    const beatRef = doc(db, 'beats', id);
-    try {
-      await updateDoc(beatRef, { 
-        ...updates,
-        updatedAt: serverTimestamp()
+        feedPosts: [post, ...updatedPosts]
+      };
+    });
+
+    logAudit('FEED_POST_CREATED', `Published real feed post: ${post.title || post.content.slice(0, 30)}`, post.featuredBeatId, post.featuredPackId);
+
+    fetch('/api/feed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(post)
+    }).catch(err => console.error("Save feed post error:", err));
+  };
+
+  const updateFeedPost = (id: string, updates: Partial<FeedPost>) => {
+    setState(prev => {
+      let updatedPosts = prev.feedPosts.map(p => {
+        if (p.id === id) {
+          return { ...p, ...updates, updatedAt: new Date().toISOString() };
+        }
+        if (updates.isPinned) {
+          return { ...p, isPinned: false };
+        }
+        return p;
       });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `beats/${id}`);
+
+      const updatedPost = updatedPosts.find(p => p.id === id);
+      if (updatedPost) {
+        fetch('/api/feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedPost)
+        }).catch(err => console.error("Update feed post error:", err));
+      }
+
+      return {
+        ...prev,
+        feedPosts: updatedPosts
+      };
+    });
+  };
+
+  const deleteFeedPost = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      feedPosts: prev.feedPosts.filter(p => p.id !== id)
+    }));
+
+    logAudit('FEED_POST_DELETED', `Deleted feed post ID: ${id}`);
+
+    fetch(`/api/feed/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Delete feed post error:", err));
+  };
+
+  const togglePinFeedPost = (id: string) => {
+    setState(prev => {
+      const target = prev.feedPosts.find(p => p.id === id);
+      if (!target) return prev;
+
+      const nextPinnedState = !target.isPinned;
+      const updatedPosts = prev.feedPosts.map(p => {
+        if (p.id === id) {
+          return { ...p, isPinned: nextPinnedState };
+        }
+        // If pinning this post, unpin any other post so only 1 post is pinned
+        if (nextPinnedState) {
+          return { ...p, isPinned: false };
+        }
+        return p;
+      });
+
+      const updatedPost = updatedPosts.find(p => p.id === id);
+      if (updatedPost) {
+        fetch('/api/feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedPost)
+        }).catch(err => console.error("Pin feed post error:", err));
+      }
+
+      return {
+        ...prev,
+        feedPosts: updatedPosts
+      };
+    });
+  };
+
+  const likeFeedPost = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      feedPosts: prev.feedPosts.map(p => {
+        if (p.id === id) {
+          return { ...p, likes: (p.likes || 0) + 1 };
+        }
+        return p;
+      })
+    }));
+
+    fetch(`/api/feed/${id}/like`, {
+      method: 'POST'
+    }).catch(err => console.error("Like feed post error:", err));
+  };
+
+  const updateHomepageLayout = async (newLayout: HomepageLayout) => {
+    setState(prev => ({
+      ...prev,
+      homepageLayout: newLayout
+    }));
+    try {
+      localStorage.setItem('voodooboomin_layout', JSON.stringify(newLayout));
+      await fetch('/api/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLayout)
+      });
+      logAudit('LAYOUT_UPDATED', `Updated storefront layout configuration (${newLayout.filter(s => s.enabled).length} sections active)`);
+    } catch (err) {
+      console.error("Save layout error:", err);
     }
   };
+
+  const resetHomepageLayout = async () => {
+    setState(prev => ({
+      ...prev,
+      homepageLayout: DEFAULT_HOMEPAGE_LAYOUT
+    }));
+    try {
+      localStorage.setItem('voodooboomin_layout', JSON.stringify(DEFAULT_HOMEPAGE_LAYOUT));
+      await fetch('/api/layout/reset', {
+        method: 'POST'
+      });
+      logAudit('LAYOUT_RESET', 'Reset storefront layout configuration to default ordering');
+    } catch (err) {
+      console.error("Reset layout error:", err);
+    }
+  };
+
+  // 🌐 Music Distribution & Services Actions
+  const addDistributorPartner = async (distributor: DistributorPartner) => {
+    setState(prev => {
+      const currentList = prev.distributorPartners || [];
+      const updated = [...currentList, distributor];
+      updated.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      return {
+        ...prev,
+        distributorPartners: updated
+      };
+    });
+
+    logAudit('DISTRIBUTOR_ADDED', `Added music distributor partner: ${distributor.name}`);
+
+    try {
+      await fetch('/api/distributors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(distributor)
+      });
+    } catch (err) {
+      console.error("Save distributor error:", err);
+    }
+  };
+
+  const updateDistributorPartner = async (id: string, updates: Partial<DistributorPartner>) => {
+    setState(prev => {
+      const currentList = prev.distributorPartners || [];
+      const updated = currentList.map(d => {
+        if (d.id === id) {
+          return { ...d, ...updates, updatedAt: new Date().toISOString() };
+        }
+        return d;
+      });
+      updated.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      return {
+        ...prev,
+        distributorPartners: updated
+      };
+    });
+
+    logAudit('DISTRIBUTOR_UPDATED', `Updated music distributor partner: ID ${id}`);
+
+    try {
+      await fetch(`/api/distributors/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+    } catch (err) {
+      console.error("Update distributor error:", err);
+    }
+  };
+
+  const deleteDistributorPartner = async (id: string) => {
+    const target = (state.distributorPartners || []).find(d => d.id === id);
+    setState(prev => ({
+      ...prev,
+      distributorPartners: (prev.distributorPartners || []).filter(d => d.id !== id)
+    }));
+
+    logAudit('DISTRIBUTOR_DELETED', `Deleted music distributor partner: ${target?.name || id}`);
+
+    try {
+      await fetch(`/api/distributors/${id}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.error("Delete distributor error:", err);
+    }
+  };
+
+  const reorderDistributorPartners = async (distributors: DistributorPartner[]) => {
+    const updated = distributors.map((d, idx) => ({ ...d, sortOrder: idx + 1 }));
+    setState(prev => ({
+      ...prev,
+      distributorPartners: updated
+    }));
+
+    logAudit('DISTRIBUTORS_REORDERED', `Reordered ${updated.length} music distributor partners`);
+
+    try {
+      await fetch('/api/distributors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+    } catch (err) {
+      console.error("Reorder distributors error:", err);
+    }
+  };
+
+  const trackDistributorClick = async (distributorId: string, distributorName: string, sourcePage: string = 'Services') => {
+    // Optimistically update distributor clickCount and click log
+    setState(prev => {
+      const currentPartners = prev.distributorPartners || [];
+      const updatedPartners = currentPartners.map(d => {
+        if (d.id === distributorId) {
+          return { ...d, clickCount: (d.clickCount || 0) + 1 };
+        }
+        return d;
+      });
+
+      const newClick: DistributorClickLog = {
+        id: `clk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        distributorId,
+        distributorName,
+        timestamp: new Date().toISOString(),
+        sourcePage
+      };
+
+      const updatedClicks = [newClick, ...(prev.distributorClicks || [])].slice(0, 1000);
+
+      return {
+        ...prev,
+        distributorPartners: updatedPartners,
+        distributorClicks: updatedClicks
+      };
+    });
+
+    logAudit('DISTRIBUTOR_CLICKED', `Outbound referral link clicked: ${distributorName}`);
+
+    try {
+      await fetch(`/api/distributors/${distributorId}/click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ distributorName, sourcePage })
+      });
+    } catch (err) {
+      console.error("Track click error:", err);
+    }
+  };
+
+  const addProfessional = async (professional: MusicProfessional) => {
+    setState(prev => {
+      const current = prev.professionals || [];
+      const updated = [...current, professional];
+      return { ...prev, professionals: updated };
+    });
+
+    logAudit('PROFESSIONAL_APPLIED', `New music professional joined: ${professional.name}`);
+
+    try {
+      await fetch('/api/professionals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(professional)
+      });
+    } catch (err) {
+      console.error("Add professional error:", err);
+    }
+  };
+
+  const updateProfessional = async (id: string, updates: Partial<MusicProfessional>) => {
+    setState(prev => {
+      const current = prev.professionals || [];
+      const updated = current.map(p => p.id === id ? { ...p, ...updates } : p);
+      return { ...prev, professionals: updated };
+    });
+
+    if (updates.status) {
+      logAudit('PROFESSIONAL_STATUS_UPDATED', `Updated professional ${id} status to ${updates.status}`);
+    } else {
+      logAudit('PROFESSIONAL_UPDATED', `Updated professional profile details for ${id}`);
+    }
+
+    try {
+      await fetch(`/api/professionals/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+    } catch (err) {
+      console.error("Update professional error:", err);
+    }
+  };
+
+  const deleteProfessional = async (id: string) => {
+    const target = (state.professionals || []).find(p => p.id === id);
+    setState(prev => ({
+      ...prev,
+      professionals: (prev.professionals || []).filter(p => p.id !== id)
+    }));
+
+    logAudit('PROFESSIONAL_DELETED', `Deleted professional profile: ${target?.name || id}`);
+
+    try {
+      await fetch(`/api/professionals/${id}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.error("Delete professional error:", err);
+    }
+  };
+
+  const updateServicesConfig = async (config: ServicesConfig) => {
+    setState(prev => ({
+      ...prev,
+      servicesConfig: config
+    }));
+
+    logAudit('SERVICES_CONFIG_UPDATED', `Updated Services configuration`);
+
+    try {
+      await fetch('/api/services/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+    } catch (err) {
+      console.error("Update services config error:", err);
+    }
+  };
+
+  const trackProfessionalClick = async (id: string, action: 'view' | 'contact') => {
+    setState(prev => {
+      const current = prev.professionals || [];
+      const updated = current.map(p => {
+        if (p.id === id) {
+          if (action === 'contact') {
+            return { ...p, contactClicks: (p.contactClicks || 0) + 1 };
+          } else {
+            return { ...p, profileViews: (p.profileViews || 0) + 1 };
+          }
+        }
+        return p;
+      });
+      return { ...prev, professionals: updated };
+    });
+
+    try {
+      await fetch(`/api/professionals/${id}/click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+    } catch (err) {
+      console.error("Track professional click error:", err);
+    }
+  };
+
+  const setFeaturedBeatId = useCallback((beatId: string | null) => {
+    setState(prev => ({ ...prev, featuredBeatId: beatId }));
+    if (beatId) {
+      localStorage.setItem('voodooboomin_featured_beat_id', beatId);
+    } else {
+      localStorage.removeItem('voodooboomin_featured_beat_id');
+    }
+  }, []);
+
+  const setAnnouncement = useCallback((announcement: Announcement | null) => {
+    setState(prev => ({ ...prev, announcement }));
+    if (announcement) {
+      localStorage.setItem('voodooboomin_announcement', JSON.stringify(announcement));
+    } else {
+      localStorage.removeItem('voodooboomin_announcement');
+    }
+  }, []);
+
+  const addBeatToVault = useCallback((beatId: string) => {
+    setState(prev => {
+      const currentVault = prev.vaultConfig || { beatIds: [], packIds: [] };
+      if (currentVault.beatIds.includes(beatId)) return prev;
+      const updatedVault = {
+        ...currentVault,
+        beatIds: [...currentVault.beatIds, beatId]
+      };
+      localStorage.setItem('voodooboomin_vault_config', JSON.stringify(updatedVault));
+      return { ...prev, vaultConfig: updatedVault };
+    });
+  }, []);
+
+  const removeBeatFromVault = useCallback((beatId: string) => {
+    setState(prev => {
+      const currentVault = prev.vaultConfig || { beatIds: [], packIds: [] };
+      const updatedVault = {
+        ...currentVault,
+        beatIds: currentVault.beatIds.filter(id => id !== beatId)
+      };
+      localStorage.setItem('voodooboomin_vault_config', JSON.stringify(updatedVault));
+      return { ...prev, vaultConfig: updatedVault };
+    });
+  }, []);
+
+  const addPackToVault = useCallback((packId: string) => {
+    setState(prev => {
+      const currentVault = prev.vaultConfig || { beatIds: [], packIds: [] };
+      if (currentVault.packIds.includes(packId)) return prev;
+      const updatedVault = {
+        ...currentVault,
+        packIds: [...currentVault.packIds, packId]
+      };
+      localStorage.setItem('voodooboomin_vault_config', JSON.stringify(updatedVault));
+      return { ...prev, vaultConfig: updatedVault };
+    });
+  }, []);
+
+  const removePackFromVault = useCallback((packId: string) => {
+    setState(prev => {
+      const currentVault = prev.vaultConfig || { beatIds: [], packIds: [] };
+      const updatedVault = {
+        ...currentVault,
+        packIds: currentVault.packIds.filter(id => id !== packId)
+      };
+      localStorage.setItem('voodooboomin_vault_config', JSON.stringify(updatedVault));
+      return { ...prev, vaultConfig: updatedVault };
+    });
+  }, []);
+
+  const setVaultFeaturedItem = useCallback((itemId?: string) => {
+    setState(prev => {
+      const currentVault = prev.vaultConfig || { beatIds: [], packIds: [] };
+      const updatedVault = {
+        ...currentVault,
+        featuredItemId: itemId
+      };
+      localStorage.setItem('voodooboomin_vault_config', JSON.stringify(updatedVault));
+      return { ...prev, vaultConfig: updatedVault };
+    });
+  }, []);
 
   return (
     <StoreContext.Provider
@@ -725,7 +1417,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         incrementAnalytics,
         resetAnalytics,
         
-        // Round 3 Dashboard Actions
+        // Feed Actions
+        addFeedPost,
+        updateFeedPost,
+        deleteFeedPost,
+        togglePinFeedPost,
+        likeFeedPost,
+
+        // Homepage Layout Actions
+        updateHomepageLayout,
+        resetHomepageLayout,
+
+        // Music Distribution & Services Actions
+        addDistributorPartner,
+        updateDistributorPartner,
+        deleteDistributorPartner,
+        reorderDistributorPartners,
+        trackDistributorClick,
+
+        // Professional Services Actions
+        addProfessional,
+        updateProfessional,
+        deleteProfessional,
+        updateServicesConfig,
+        trackProfessionalClick,
+
+        // Features 27, 28, 30 Actions
+        setFeaturedBeatId,
+        setAnnouncement,
+        addBeatToVault,
+        removeBeatFromVault,
+        addPackToVault,
+        removePackFromVault,
+        setVaultFeaturedItem,
+
+        // Dashboard Actions
         addBeatPack,
         updateBeatPack,
         deleteBeatPack,
@@ -742,7 +1468,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         addSyncCue,
         logAudit,
         
-        // E-commerce states and actions
+        // E-commerce states and actions (PayPal)
         cart,
         addToCart,
         removeFromCart,
@@ -754,6 +1480,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setCurrency,
         favorites,
         toggleFavorite,
+        recentlyViewed,
+        trackBeatView,
       }}
     >
       {children}

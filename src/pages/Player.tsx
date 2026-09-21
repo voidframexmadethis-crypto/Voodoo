@@ -159,15 +159,16 @@ export default function Player() {
     })
     .then(res => res.json())
     .then(session => {
-      if (session.stripeCheckoutUrl) {
-        window.location.href = session.stripeCheckoutUrl;
+      if (session.paypalCheckoutUrl) {
+        window.location.href = session.paypalCheckoutUrl;
       } else {
-        alert("Booking deposit intent created successfully! Redirecting...");
+        alert("Booking deposit intent created successfully! Directing to PayPal...");
+        window.location.href = `https://www.paypal.com/paypalme/voodooboomin/100`;
       }
     })
     .catch(err => {
       console.error("Booking error:", err);
-      alert("Booking session initialized successfully.");
+      window.location.href = `https://www.paypal.com/paypalme/voodooboomin/100`;
     });
   };
 
@@ -467,10 +468,10 @@ export default function Player() {
 
   return (
     <div className="bg-[#08080b] min-h-screen text-white pt-10 px-4 md:px-12 pb-28 font-sans">
-      <div className="max-w-[1240px] mx-auto flex flex-col gap-8">
+      <div className="w-full flex flex-col gap-8">
         
-        {/* 999x900 EXCLUSIVE AESTHETIC PLAYER STATION */}
-        <div className="mx-auto w-full md:w-[999px] h-auto md:h-[900px] flex flex-col justify-between gap-6 font-sans">
+        {/* EXCLUSIVE AESTHETIC PLAYER STATION */}
+        <div className="w-full h-auto flex flex-col justify-between gap-6 font-sans">
           
           {/* BANNER CARD (Top, h-[460px]) */}
           <div className="relative h-[460px] bg-black rounded-2xl overflow-hidden border border-purple-950/40 shadow-[0_0_40px_rgba(0,0,0,0.85)] flex flex-col justify-between p-8 group">

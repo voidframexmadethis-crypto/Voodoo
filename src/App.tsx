@@ -14,6 +14,8 @@ import Uploader from './pages/Uploader';
 import Admin from './pages/Admin';
 import AdminPortal from './pages/AdminPortal';
 import EnterpriseMusicPlatform from './pages/Enterprise';
+import Services from './pages/Services';
+import TopCharts from './pages/TopCharts';
 
 class GlobalErrorBoundary extends (React.Component as any) {
   constructor(props: any) {
@@ -97,7 +99,9 @@ export default function App() {
                 <Route path="upload" element={<Uploader />} />
                 <Route path="uploader" element={<Uploader />} />
                 <Route path="admin" element={<Admin />} />
-                <Route path="enterprise" element={<EnterpriseMusicPlatform />} />
+                <Route path="services" element={<Services />} />
+                <Route path="enterprise" element={<Services />} />
+                <Route path="top-charts" element={<TopCharts />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

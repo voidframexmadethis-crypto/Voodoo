@@ -125,7 +125,7 @@ export default function Home() {
   };
 
   return (
-    <div style={{ padding: '10px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif', color: '#ffffff' }}>
+    <div style={{ padding: '10px', width: '100%', fontFamily: 'sans-serif', color: '#ffffff' }}>
       
       {/* Dynamic Tab Navigation Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1c1c1f', paddingBottom: '15px', marginBottom: '30px', flexWrap: 'wrap', gap: '15px' }}>
